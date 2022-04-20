@@ -1,0 +1,9 @@
+{
+    "width": 16,
+    "precision": 13,
+    "use_min_skip": true,
+    "max_skip": {
+	"0.2": 1,
+	"default": 0
+    }
+}
