@@ -1,9 +1,0 @@
-{
-	"width": 16,
-	"precision": 13,
-	"max_skip": 2,
-	"threshold_factor": {
-		"0.8": 1.1,
-		"0.9": 1.05
-	}
-}

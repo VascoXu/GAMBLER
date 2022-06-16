@@ -1,0 +1,8 @@
+scikit-learn
+numpy
+scipy
+matplotlib
+pexpect
+requests
+h5py
+pandas
