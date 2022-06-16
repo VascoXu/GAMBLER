@@ -48,8 +48,8 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, window: tuple,
         # if should_enforce_budget:
             # should_collect = should_collect and not policy.has_exhausted_budget()
     
-        # if should_collect and not policy.has_exhausted_budget():
-        if should_collect:
+        if should_collect and not policy.has_exhausted_budget():
+        # if should_collect:
             measurement = sequence[seq_idx]
             policy.collect(measurement=measurement)
 

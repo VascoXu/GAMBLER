@@ -48,7 +48,7 @@ class AdaptiveBandit(AdaptiveLiteSense):
 
         # Epsilon-greedy parameters
         self._epsilon = 1
-        self._sigma = 0.7
+        self._sigma = 8
         self._step_size = 0.2
         self._decay = 0.9
         self._initial = 10
@@ -109,28 +109,24 @@ class AdaptiveBandit(AdaptiveLiteSense):
 
         # Update estimate mean reward
         # reward = 1/abs(percentile/100-self._collection_rate)
-        reward = 1/abs(sum(self._dev)-self._collection_rate)
+        reward = min(1/abs(sum(self._dev)-self._collection_rate), 200)
         q_estimate = self._actions[self._j].reward
         q_a = q_estimate + self._step_size*(reward - q_estimate)
         self._actions[self._j].reward = q_a
 
-        print('Eps: ', self._epsilon)
-
-        # print(round(self._actions[self._j].val, 2))
-
         # print(f'ACTION ({round(self._actions[self._j].val, 2)}):')
         # print('====================================================')
+        # print(f'TD_error: {reward-q_estimate}')
         # print(f'percentile: {percentile} | dev: {sum(self._dev)}')
         # print(f'prev estimate: {q_estimate}')
         # print(f'received reward: {reward}')
         # print(f'updted estimate: {self._actions[self._j].reward}')
-        # print('====================================================')
 
         if self._initial < len(self._actions):
             # Try all actions
             collection_rate = self._actions[self._initial].val
             self._j = self._initial
-            self._initial += 1        
+            self._initial += 1
         else:
             # Epsilon-Greedy Approach
             rand = self._rand.random()
@@ -152,10 +148,12 @@ class AdaptiveBandit(AdaptiveLiteSense):
             bottom = (1+math.e**((-(self._step_size)*TD_error)/self._sigma))
 
             f = top / bottom 
-            # print('Previous Eps: ', self._epsilon)
             self._epsilon = self._delta * f + (1-self._delta) * self._epsilon
-            # print('After Eps: ', self._epsilon)                
 
+            print(abs(reward-q_estimate), self._epsilon)
+
+            # print(f'epsilon: {self._epsilon}')
+            # print('====================================================')
 
         # Update collection rate
         if (self._skip_idx < len(self._skip_indices) and self._collection_rate != collection_rate):
