@@ -14,7 +14,7 @@ from gambler.utils.action import Action
 from gambler.utils.distribution import load_distribution
 
 
-class AdaptiveBandit(AdaptiveLiteSense):
+class AdaptiveSigma(AdaptiveLiteSense):
 
     def __init__(self,
                  collection_rate: float,
@@ -44,21 +44,6 @@ class AdaptiveBandit(AdaptiveLiteSense):
         self._distribution = load_distribution('moving_dist.txt')
         self._interp = np.interp(self._distribution, [min(self._distribution), max(self._distribution)], [0, 100])
         self._deviations = []
-
-        # Epsilon-greedy parameters
-        self._epsilon = 1
-        self._sigma = 7
-        self._step_size = 0.2
-        self._decay = 0.9
-        self._initial = 10
-
-        # Bandit parameters
-        self._actions = []
-        for i in range(2, 10):
-            self._actions.append(Action(i*0.1))
-        self._j = len(self._actions) - 1
-
-        self._delta = 1/len(self._actions)
 
         # Default parameters
         self._collection_rate = 0.9
@@ -92,13 +77,14 @@ class AdaptiveBandit(AdaptiveLiteSense):
 
     @property
     def policy_type(self) -> PolicyType:
-        return PolicyType.ADAPTIVE_BANDIT
+        return PolicyType.ADAPTIVE_SIGMA
         
     def should_collect(self, seq_idx: int, seq_num: int) -> bool:
         if (self._skip_idx < len(self._skip_indices) and seq_idx == self._skip_indices[self._skip_idx]):
             self._skip_idx += 1
             return True
 
+        # print(self._skip_indices[self._skip_idx], seq_idx)
         return False
 
     def update(self, collection_ratio: float, seq_idx: int):
@@ -110,60 +96,9 @@ class AdaptiveBandit(AdaptiveLiteSense):
         dev = np.interp(sum(self._dev), [min(self._distribution), max(self._distribution)], [0, 100])
         percentile = np.percentile(self._interp, dev)
 
-        # Update estimate mean reward
-        # reward = 1/abs(percentile/100-self._collection_rate)
+        # Update estimate mean reward            
         _dev = sum(self._deviations)/len(self._deviations)
-        # reward = min(1/abs(sum(self._dev)-self._collection_rate), 50)
-        # reward = 1/abs(sum(self._dev)-self._collection_rate)
-
-        for i,action in enumerate(self._actions):
-            reward = min(1/abs(_dev-action.val), 50)
-            q_estimate = action.reward
-            q_a = q_estimate + self._step_size*(reward - q_estimate)
-            self._actions[i].reward = q_a
-
-        # reward = min(1/abs(_dev-self._collection_rate), 50)
-        # q_estimate = self._actions[self._j].reward
-        # q_a = q_estimate + self._step_size*(reward - q_estimate)
-        # self._actions[self._j].reward = q_a
-
-        # print(f'ACTION ({round(self._actions[self._j].val, 2)}):')
-        # print('====================================================')
-        # print(f'TD_error: {reward-q_estimate}')
-        # print(f'percentile: {percentile} | dev: {_dev}')
-        # print(f'prev estimate: {q_estimate}')
-        # print(f'received reward: {reward}')
-        # print(f'updted estimate: {self._actions[self._j].reward}')
-
-        if self._initial < len(self._actions):
-            # Try all actions
-            collection_rate = self._actions[self._initial].val
-            self._j = self._initial
-            self._initial += 1
-        else:
-            # Epsilon-Greedy Approach
-            rand = self._rand.random()
-            if rand < self._epsilon: 
-                # explore
-                idx = random.choice(range(len(self._actions)))
-                collection_rate = round(self._actions[idx].val,2)
-                # print(f'EXPLORE: {round(collection_rate, 2)}')
-                self._j = idx
-            else: 
-                # exploit
-                self._j = np.argmax([action.reward for i,action in enumerate(self._actions)])
-                collection_rate = round(self._actions[self._j].val,2)
-
-            # Update epsilon
-            TD_error = abs(reward - q_estimate)
-            top = (1-math.e**((-(self._step_size)*TD_error)/self._sigma))
-            bottom = (1+math.e**((-(self._step_size)*TD_error)/self._sigma))
-
-            f = top / bottom 
-            self._epsilon = self._delta * f + (1-self._delta) * self._epsilon
-
-            # print(f'epsilon: {self._epsilon}')
-            # print('====================================================')
+        collection_rate = round(min(_dev, 1), 1)
 
         # Update collection rate
         if (self._skip_idx < len(self._skip_indices) and self._collection_rate != collection_rate):
@@ -209,7 +144,5 @@ class AdaptiveBandit(AdaptiveLiteSense):
         self._skip_idx = 0
 
     def reset_params(self):
-        print("====================================LABEL CHANGE================================================")
-        # for i in range(len(self._actions)):
-        #     pass
-        #     print(f'Action {round((i+2)*0.1, 2)}: {self._actions[i].reward}')
+        pass
+        # print("====================================LABEL CHANGE================================================")

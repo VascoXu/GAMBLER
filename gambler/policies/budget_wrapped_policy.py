@@ -11,6 +11,7 @@ from gambler.policies.adaptive_controller import AdaptiveController
 from gambler.policies.adaptive_deviation import AdaptiveDeviation
 from gambler.policies.adaptive_litesense import AdaptiveLiteSense
 from gambler.policies.adaptive_bandit import AdaptiveBandit
+from gambler.policies.adaptive_sigma import AdaptiveSigma
 from gambler.policies.adaptive_greedy import AdaptiveGreedy
 from gambler.policies.adaptive_heuristic import AdaptiveHeuristic
 from gambler.policies.adaptive_uniform import AdaptiveUniform
@@ -235,6 +236,8 @@ def make_policy(name: str,
             cls = AdaptiveUniform
         elif name == 'adaptive_bandit':
             cls = AdaptiveBandit
+        elif name =='adaptive_sigma':
+            cls = AdaptiveSigma
         else:
             raise ValueError('Unknown adaptive policy with name: {0}'.format(name))
 
