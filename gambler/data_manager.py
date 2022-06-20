@@ -13,8 +13,6 @@ def args_data(args, inputs, labels):
         """Return inputs of desired label"""
         desired_label = int(args.labels)
         label_idx = np.where(labels == desired_label)[0]
-        unique_labels = set(labels)
-
         inputs = np.asarray([inputs[i] for i in label_idx])
         labels = np.asarray([labels[i] for i in label_idx])
 

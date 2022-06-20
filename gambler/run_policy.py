@@ -170,7 +170,7 @@ if __name__ == '__main__':
     # if args.save_dataset:
     # Write to reconstructed dataset
     out_folder = f'{args.dataset}/reconstructed'
-    out_filename = f'reconstructed_{args.distribution}'
+    out_filename = f'reconstructed_{args.policy}_{args.distribution}'
     write_dataset(reconstructed, labels, out_filename, out_folder) 
 
     """
@@ -219,9 +219,17 @@ if __name__ == '__main__':
         avg_error = sum(label_errors)/len(label_errors)
         error_dict[label] = avg_error
 
+    avg_cr = 0
+    for i in range(4):
+        label_idx = np.where(labels == i)[0]
+        crs = np.asarray([collection_ratios[i] for i in label_idx])
+        print(crs)
+
     # Calculate different error metrics
     avg_seq_error = sum(errors)/len(errors)
     avg_label_error = sum(error_dict.values())/len(error_dict)
+
+    print("AVG LABEL ERROR: ", avg_label_error)
 
     # Log information for graphing
     if len(args.output_folder) > 0:

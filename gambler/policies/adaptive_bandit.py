@@ -109,18 +109,19 @@ class AdaptiveBandit(AdaptiveLiteSense):
 
         # Update estimate mean reward
         # reward = 1/abs(percentile/100-self._collection_rate)
-        reward = min(1/abs(sum(self._dev)-self._collection_rate), 200)
+        reward = min(1/abs(sum(self._dev)-self._collection_rate), 500)
+        # reward = 1/abs(sum(self._dev)-self._collection_rate)
         q_estimate = self._actions[self._j].reward
         q_a = q_estimate + self._step_size*(reward - q_estimate)
         self._actions[self._j].reward = q_a
 
-        # print(f'ACTION ({round(self._actions[self._j].val, 2)}):')
-        # print('====================================================')
-        # print(f'TD_error: {reward-q_estimate}')
-        # print(f'percentile: {percentile} | dev: {sum(self._dev)}')
-        # print(f'prev estimate: {q_estimate}')
-        # print(f'received reward: {reward}')
-        # print(f'updted estimate: {self._actions[self._j].reward}')
+        print(f'ACTION ({round(self._actions[self._j].val, 2)}):')
+        print('====================================================')
+        print(f'TD_error: {reward-q_estimate}')
+        print(f'percentile: {percentile} | dev: {sum(self._dev)}')
+        print(f'prev estimate: {q_estimate}')
+        print(f'received reward: {reward}')
+        print(f'updted estimate: {self._actions[self._j].reward}')
 
         if self._initial < len(self._actions):
             # Try all actions
@@ -134,7 +135,7 @@ class AdaptiveBandit(AdaptiveLiteSense):
                 # explore
                 idx = random.choice(range(len(self._actions)))
                 collection_rate = round(self._actions[idx].val,2)
-                # print(f'EXPLORE: {round(collection_rate, 2)}')
+                print(f'EXPLORE: {round(collection_rate, 2)}')
                 self._j = idx
             else: 
                 # exploit
@@ -150,7 +151,7 @@ class AdaptiveBandit(AdaptiveLiteSense):
             f = top / bottom 
             self._epsilon = self._delta * f + (1-self._delta) * self._epsilon
 
-            print(abs(reward-q_estimate), self._epsilon)
+            # print(abs(reward-q_estimate), self._epsilon)
 
             # print(f'epsilon: {self._epsilon}')
             # print('====================================================')
