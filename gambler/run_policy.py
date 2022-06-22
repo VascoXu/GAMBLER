@@ -158,12 +158,12 @@ if __name__ == '__main__':
     num_samples = num_measurements
     num_collected = sum(len(c) for c in collected[:collected_seq])
 
-    # avg_cr = 0
-    # for i in range(4):
-    #     label_idx = np.where(labels == i)[0]
-    #     crs = [collection_ratios[i] for i in label_idx]
-    #     crs = [c for cr in crs for c in cr]
-    #     print(crs, len(crs))
+    avg_cr = 0
+    for i in range(4):
+        label_idx = np.where(labels == i)[0]
+        crs = [collection_ratios[i] for i in label_idx]
+        crs = [c for cr in crs for c in cr]
+        print(crs, len(crs))
 
 
     collection_ratios = [cr for collection_ratio in collection_ratios for cr in collection_ratio] # flatten
@@ -226,6 +226,8 @@ if __name__ == '__main__':
         label_errors = [errors [i] for i in label_idx]
         avg_error = sum(label_errors)/len(label_errors)
         error_dict[label] = avg_error
+    
+    print(error_dict)
 
     # Calculate different error metrics
     avg_seq_error = sum(errors)/len(errors)

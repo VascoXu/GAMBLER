@@ -11,6 +11,7 @@ class PolicyType(Enum):
     ADAPTIVE_UNIFORM = auto()
     ADAPTIVE_BANDIT = auto()
     ADAPTIVE_SIGMA = auto()
+    BANDIT_BUDGET = auto()
     UNIFORM = auto()
     RANDOM = auto()
 
