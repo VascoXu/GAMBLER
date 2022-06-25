@@ -54,8 +54,9 @@ class AdaptiveUniform(AdaptiveLiteSense):
         if self._sample_count >= self._budget_cutoff and self._adaptive and seq_idx == 0:
             leftover = self._budget - self._sample_count
             target_samples = int(leftover/(self._num_seq-seq_num))
+            leftover_rate = target_samples / self._seq_length
 
-            skip = max(1.0 / self._collection_rate, 1)
+            skip = max(1.0 / leftover_rate, 1)
             frac_part = skip - math.floor(skip)
 
             index = 0

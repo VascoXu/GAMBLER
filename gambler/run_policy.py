@@ -44,7 +44,7 @@ if __name__ == '__main__':
     parser.add_argument('--randomize', type=str, default='')            # used for debugging 
     parser.add_argument('--block-size', type=int, default=1)            # used for debugging
     parser.add_argument('--labels', type=str, default='all')            # used for debugging
-    parser.add_argument('--distribution', type=str, default='even')         # used for debugging
+    parser.add_argument('--distribution', type=str, default='')         # used for debugging
     parser.add_argument('--should-enforce-budget', action='store_true')
     parser.add_argument('--save-dataset', action='store_true')
     parser.add_argument('--output-folder', type=str, default='')
@@ -163,8 +163,7 @@ if __name__ == '__main__':
         label_idx = np.where(labels == i)[0]
         crs = [collection_ratios[i] for i in label_idx]
         crs = [c for cr in crs for c in cr]
-        print(crs, len(crs))
-
+        # print(crs, len(crs))
 
     collection_ratios = [cr for collection_ratio in collection_ratios for cr in collection_ratio] # flatten
     reconstructed = np.vstack([np.expand_dims(r, axis=0) for r in estimate_list])  # [N, T, D]
@@ -227,13 +226,13 @@ if __name__ == '__main__':
         avg_error = sum(label_errors)/len(label_errors)
         error_dict[label] = avg_error
     
-    print(error_dict)
+    # print(error_dict)
 
     # Calculate different error metrics
     avg_seq_error = sum(errors)/len(errors)
     avg_label_error = sum(error_dict.values())/len(error_dict)
 
-    print("AVG LABEL ERROR: ", avg_label_error)
+    # print("AVG LABEL ERROR: ", avg_label_error)
 
     # Log information for graphing
     if len(args.output_folder) > 0:

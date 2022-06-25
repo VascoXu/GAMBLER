@@ -104,16 +104,9 @@ class BanditBudget(AdaptiveLiteSense):
         # Reached halfway point
         if self._count == (self._total_samples/2) and not self._switched:
             # Determine leftover budget
-            print("COLLECTED: ", self._sample_count, self._budget)
-
             leftover = round(self._budget - self._sample_count)
             target_samples = int(leftover/(self._num_seq-seq_num))
             leftover_rate = target_samples / self._seq_length
-            leftover_rate = 1
-            target_samples = self._seq_length
-
-            print(self._sample_count / self._budget)
-            print(target_samples, self._seq_length)
 
             # Switch to uniform for remaining  of the budget
             old_idx = self._skip_indices[self._skip_idx]
@@ -266,7 +259,7 @@ class BanditBudget(AdaptiveLiteSense):
         self._skip_idx = 0
 
     def reset_params(self):
-        print("====================================LABEL CHANGE================================================")
+        pass
+        # print("====================================LABEL CHANGE================================================")
         # for i in range(len(self._actions)):
-        #     pass
         #     print(f'Action {round((i+2)*0.1, 2)}: {self._actions[i].reward}')

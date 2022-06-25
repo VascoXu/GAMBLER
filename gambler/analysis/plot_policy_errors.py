@@ -9,12 +9,14 @@ import itertools
 
 from gambler.analysis.plot_utils import bar_plot
 
-ADAPTIVE_STATIC_CMD = 'python ../run_policy.py --dataset {0} --policy adaptive_deviation --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-UNIFORM_CMD = 'python ../run_policy.py --dataset {0} --policy uniform --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_STATIC_CMD = 'python run_policy.py --dataset {0} --policy adaptive_deviation --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
+UNIFORM_CMD = 'python run_policy.py --dataset {0} --policy uniform --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
 ADAPTIVE_CONTROLLER_CMD = 'python run_policy.py --dataset {0} --policy adaptive_controller --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
 ADAPTIVE_GREEDY_CMD = 'python run_policy.py --dataset {0} --policy adaptive_greedy --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
 ADAPTIVE_UNIFORM_CMD = 'python run_policy.py --dataset {0} --policy adaptive_uniform --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-ADAPTIVE_BANDIT_CMD = 'python ../run_policy.py --dataset {0} --policy adaptive_bandit --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_BANDIT_CMD = 'python run_policy.py --dataset {0} --policy adaptive_bandit --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_BUDGET_CMD = 'python run_policy.py --dataset {0} --policy adaptive_budget --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_BUDGET_SIGMA_CMD = 'python run_policy.py --dataset {0} --policy adaptive_budget_sigma --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
 
 
 def run_command(cmd):
@@ -60,26 +62,22 @@ if __name__ == '__main__':
     dist = 60
     num_labels = 4
 
-    distributions = ['even']
+    distributions = ['\'\'', '0', '1', '2', '3', 'rand']
     dist_labels = get_distribution_str(dist, num_labels)
 
     policies = {'uniform': UNIFORM_CMD, 
                 'deviation': ADAPTIVE_STATIC_CMD, 
-                'bandit': ADAPTIVE_BANDIT_CMD
-                # 'adaptive_uniform': ADAPTIVE_UNIFORM_CMD,
-                # 'controller': ADAPTIVE_CONTROLLER_CMD, 
-                # 'greedy': ADAPTIVE_GREEDY_CMD
+                'adaptive_uniform': ADAPTIVE_UNIFORM_CMD,
+                'adaptive_budget': ADAPTIVE_BUDGET_CMD,
+                'adaptive_budget_sigma': ADAPTIVE_BUDGET_SIGMA_CMD,
                 }
 
     dists = get_distribution_str(dist, num_labels)
 
     # Run policies on different distributions
-    errors = {'uniform': [], 'deviation': [], 'adaptive_uniform': [], 'controller': [], 'greedy': []}
-    errors = {'uniform': [], 'deviation': [], 'bandit': []}
+    errors = {'uniform': [], 'deviation': [], 'adaptive_uniform': [], 'adaptive_budget': [], 'adaptive_budget_sigma': []}
     for dist in distributions:
-        print(dist)
         for policy in policies.keys():
-
             if dist == 'rand':
                 cmd = policies[policy].format(args.dataset, args.collection_rate, args.window_size, 'even')
                 cmd += ' --randomize group --block-size 1'
@@ -87,16 +85,17 @@ if __name__ == '__main__':
                 cmd = policies[policy].format(args.dataset, args.collection_rate, args.window_size, dist)
 
             res = run_command(cmd)
+            print(res)
             error, num_collected, total_samples = res.split(',')
             errors[policy].append(float(error))
 
     # # Calculate average error
-    # for policy in policies.keys():
-    #     errors[policy].append(sum(errors[policy])/len(errors[policy]))
+    for policy in policies.keys():
+        errors[policy].append(sum(errors[policy])/len(errors[policy]))
 
     fig, ax = plt.subplots()
     print(errors)
-    bar_plot(ax, errors, total_width=.8, single_width=.9, legend=['Uniform', 'Adaptive Static', 'Adaptive Bandit'])    
-    # plt.xticks(range(len(dist_labels)), dist_labels)
-    plt.title('Average Label Error')
+    bar_plot(ax, errors, total_width=.8, single_width=.9, legend=['Uniform', 'Adaptive Threshold', 'Adaptive Uniform', 'Adaptive Bandit', 'Adaptive Sigma'])
+    plt.xticks(range(len(dist_labels)), dist_labels)
+    plt.title(f'Average Label Error {args.collection_rate}')
     plt.show()

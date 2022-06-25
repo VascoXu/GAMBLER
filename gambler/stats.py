@@ -35,10 +35,12 @@ if __name__ == '__main__':
         for seq in sequence:
             _mean = (1.0 - _alpha) * _mean + _alpha * seq
             _dev = (1.0 - _beta) * _dev + _beta * np.abs(_mean - seq)
-            if count == 200:
+            if count == 100:
                 data.append(sum(_dev))
                 count = 0
             count += 1
+
+    print(_mean)
     
     with open('moving_dist.txt', 'w') as f:
         for v in data:
@@ -47,5 +49,3 @@ if __name__ == '__main__':
     plt.plot(data, label='Moving Deviation')
     plt.legend()
     plt.show()
-
-
