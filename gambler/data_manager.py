@@ -9,6 +9,23 @@ def args_data(args, inputs, labels):
     # Unpack the shape
     num_seq, seq_length, num_features = inputs.shape
 
+    if args.labels == 'test':
+        # classes = [2, 1, 1, 1, 1, 2, 1]
+        classes = [1, 1, 1, 2, 1, 1, 2, 1]
+        # classes = [2, 2, 1, 2, 2, 1, 2, 2, 1]
+
+        label_parts = []
+        input_parts = []
+        for label in classes:
+            label_idx = np.where(labels == label)[0]
+            input_parts.append(np.asarray([inputs[i] for i in label_idx]))
+            label_parts.append(np.asarray([labels[i] for i in label_idx]))
+
+        input_parts = [item for chunk in input_parts for item in chunk] # flatten list
+        label_parts = [item for chunk in label_parts for item in chunk] # flatten list
+
+        return (np.array(input_parts), np.array(label_parts))
+
     if args.labels != 'all':
         """Return inputs of desired label"""
         desired_label = int(args.labels)

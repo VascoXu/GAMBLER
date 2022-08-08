@@ -48,8 +48,8 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, window: tuple,
         # if should_enforce_budget:
             # should_collect = should_collect and not policy.has_exhausted_budget()
     
-        # if should_collect and not policy.has_exhausted_budget():
-        if should_collect:
+        if should_collect and not policy.has_exhausted_budget():
+        # if should_collect:
             measurement = sequence[seq_idx]
             policy.collect(measurement=measurement)
 
@@ -65,7 +65,7 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, window: tuple,
             collection_ratios.append(collection_ratio)
 
             # Update threshold based on control theory
-            if policy.policy_type == PolicyType.ADAPTIVE_CONTROLLER or policy.policy_type == PolicyType.ADAPTIVE_GREEDY or policy.policy_type == PolicyType.ADAPTIVE_BANDIT or policy.policy_type == PolicyType.ADAPTIVE_SIGMA or policy.policy_type == PolicyType.BANDIT_BUDGET or policy.policy_type == PolicyType.SIGMA_BUDGET:
+            if policy.policy_type == PolicyType.ADAPTIVE_CONTROLLER or policy.policy_type == PolicyType.ADAPTIVE_GREEDY or policy.policy_type == PolicyType.ADAPTIVE_BANDIT or policy.policy_type == PolicyType.ADAPTIVE_SIGMA or policy.policy_type == PolicyType.BANDIT_BUDGET or policy.policy_type == PolicyType.SIGMA_BUDGET or policy.policy_type == PolicyType.ADAPTIVE_TRAINING or policy.policy_type == PolicyType.ADAPTIVE_TRAIN:
                 policy.update(collection_ratio, seq_idx)
 
             # Reset window parameters
@@ -74,10 +74,13 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, window: tuple,
 
     # Stack collected features into a numpy array
     collected = np.vstack(collected_list) if len(collected_list) > 0 else []  # [K, D]
+
+    training_data = policy.training if policy.policy_type == PolicyType.ADAPTIVE_TRAIN else []
     
     return PolicyResult(measurements=collected,
                         collected_indices=collected_indices,
                         collection_ratios=collection_ratios,
                         num_collected=len(collected_indices),
                         collected_within_window=collected_within_window,
-                        curr_window_size=curr_window_size)
+                        curr_window_size=curr_window_size,
+                        training_data=training_data)

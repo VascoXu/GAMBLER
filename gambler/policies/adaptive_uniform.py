@@ -112,5 +112,5 @@ class AdaptiveUniform(AdaptiveLiteSense):
         super().reset()
         self._skip_idx = 0
 
-    def reset_params(self):
+    def reset_params(self, label):
         pass    

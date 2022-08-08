@@ -46,7 +46,16 @@ class SigmaBudget(AdaptiveLiteSense):
         self._num_seq = num_seq
         self._distribution = load_distribution('moving_dist.txt')
         self._interp = np.interp(self._distribution, [min(self._distribution), max(self._distribution)], [0, 100])
+        
         self._deviations = []
+        self._means = []
+
+        self.mean = 0
+        self.dev = 0
+
+        self._offset = 0.3
+        self._decay = 0.9
+        
         self._sample_count = 0
         self._switched = False
         self._count = 0
@@ -133,6 +142,7 @@ class SigmaBudget(AdaptiveLiteSense):
         return False
 
     def update(self, collection_ratio: float, seq_idx: int):
+        # Do not update on Uniform
         if self._switched == True:
             return
 
@@ -146,8 +156,11 @@ class SigmaBudget(AdaptiveLiteSense):
 
         # Update estimate mean reward            
         _dev = sum(self._deviations)/len(self._deviations)
-        # collection_rate = round(min(_dev, 1), 1)
-        collection_rate = max(round(min(_dev, 1), 1), 0.5)
+        _mean = sum(self._means)/len(self._means)
+        cov = (_dev/_mean)/0.18
+        collection_rate = round(min(cov, 1), 1)
+        # collection_rate = round(round(min(cov, 1), 1) + self._offset, 1)
+        self._offset *= self._decay
 
         # Update collection rate
         if (self._skip_idx < len(self._skip_indices) and self._collection_rate != collection_rate):
@@ -184,15 +197,24 @@ class SigmaBudget(AdaptiveLiteSense):
         self._deviations = []
 
     def collect(self, measurement: np.ndarray):
-        self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
-        self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
-        self._deviations.append(sum(self._dev))
+        measurement = (measurement[0]**2 + measurement[1]**2 + measurement[2]**2)**0.5
+
+        # self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
+        # self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
+        self.mean = (1.0 - self._alpha) * self.mean + self._alpha * measurement
+        self.dev = (1.0 - self._beta) * self.dev + self._beta * np.abs(self.mean - measurement)
+
+        # self._deviations.append(sum(self._dev))
+        self._deviations.append(self.dev)
+        self._means.append(self.mean)
+
         self._sample_count += 1
+
 
     def reset(self):
         super().reset()
         self._skip_idx = 0
 
-    def reset_params(self):
+    def reset_params(self, label):
         pass
         # print("====================================LABEL CHANGE================================================")

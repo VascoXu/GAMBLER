@@ -47,11 +47,17 @@ class AdaptiveBandit(AdaptiveLiteSense):
         self._means = []
         self._covs = []
 
+        self._max_cov = 0.18
+
+        self.mean = 0
+        self.dev = 0
+
         # Epsilon-greedy parameters
         self._epsilon = 1
-        self._sigma = 7
+        self._sigma = 3
         self._step_size = 0.2
         self._decay = 0.9
+        self._offset = 30
         self._initial = 10
 
         # Bandit parameters
@@ -109,11 +115,8 @@ class AdaptiveBandit(AdaptiveLiteSense):
             return
 
         _dev = sum(self._deviations)/len(self._deviations)
-        _mean = np.abs(sum(self._means)/len(self._means))
+        _mean = sum(self._means)/len(self._means)
         cov = _dev/_mean
-
-        print(sum(cov))
-        _dev = sum(_dev)
 
         # Calculate percentile of observed deviation
         dev = np.interp(_dev, [min(self._distribution), max(self._distribution)], [0, 100])
@@ -121,7 +124,9 @@ class AdaptiveBandit(AdaptiveLiteSense):
 
         # Update estimate mean reward
         for i,action in enumerate(self._actions):
-            reward = min(1/abs(_dev-action.val), 50)
+            _cov = cov/self._max_cov
+            self._offset *= self._decay
+            reward = min(1/(abs(_cov-action.val)+self._offset), 50)
             q_estimate = action.reward
             q_a = q_estimate + self._step_size*(reward - q_estimate)
             self._actions[i].reward = q_a
@@ -129,88 +134,90 @@ class AdaptiveBandit(AdaptiveLiteSense):
         # print(f'ACTION ({round(self._actions[self._j].val, 2)}):')
         # print('====================================================')
         # print(f'TD_error: {reward-q_estimate}')
-        # print(f'percentile: {percentile} | dev: {_dev}')
+        # print(f'percentile: {percentile} | cov: {_cov}')
         # print(f'prev estimate: {q_estimate}')
         # print(f'received reward: {reward}')
         # print(f'updted estimate: {self._actions[self._j].reward}')
 
-        # if self._initial < len(self._actions):
-        #     # Try all actions
-        #     collection_rate = self._actions[self._initial].val
-        #     self._j = self._initial
-        #     self._initial += 1
-        # else:
-        #     # Epsilon-Greedy Approach
-        #     rand = self._rand.random()
-        #     if rand < self._epsilon: 
-        #         # explore
-        #         idx = random.choice(range(len(self._actions)))
-        #         collection_rate = round(self._actions[idx].val,2)
-        #         # print(f'EXPLORE: {round(collection_rate, 2)}')
-        #         self._j = idx
-        #     else: 
-        #         # exploit
-        #         self._j = np.argmax([action.reward for i,action in enumerate(self._actions)])
-        #         collection_rate = round(self._actions[self._j].val,2)
+        if self._initial < len(self._actions):
+            # Try all actions
+            collection_rate = self._actions[self._initial].val
+            self._j = self._initial
+            self._initial += 1
+        else:
+            # Epsilon-Greedy Approach
+            rand = self._rand.random()
+            if rand < self._epsilon: 
+                # explore
+                idx = random.choice(range(len(self._actions)))
+                collection_rate = round(self._actions[idx].val,2)
+                # print(f'EXPLORE: {round(collection_rate, 2)}')
+                self._j = idx
+            else: 
+                # exploit
+                self._j = np.argmax([action.reward for i,action in enumerate(self._actions)])
+                collection_rate = round(self._actions[self._j].val,2)
 
-        #     # Update epsilon
-        #     TD_error = abs(reward - q_estimate)
-        #     top = (1-math.e**((-(self._step_size)*TD_error)/self._sigma))
-        #     bottom = (1+math.e**((-(self._step_size)*TD_error)/self._sigma))
+            # Update epsilon
+            TD_error = abs(reward - q_estimate)
+            top = (1-math.e**((-(self._step_size)*TD_error)/self._sigma))
+            bottom = (1+math.e**((-(self._step_size)*TD_error)/self._sigma))
 
-        #     f = top / bottom 
-        #     self._epsilon = self._delta * f + (1-self._delta) * self._epsilon
+            f = top / bottom 
+            self._epsilon = self._delta * f + (1-self._delta) * self._epsilon
 
-        #     # print(f'epsilon: {self._epsilon}')
-        #     # print('====================================================')
+        # Update collection rate
+        if (self._skip_idx < len(self._skip_indices) and self._collection_rate != collection_rate):
+            old_idx = self._skip_indices[self._skip_idx]
+            target_samples = int(collection_rate * self._seq_length)
 
-        # # Update collection rate
-        # if (self._skip_idx < len(self._skip_indices) and self._collection_rate != collection_rate):
-        #     old_idx = self._skip_indices[self._skip_idx]
-        #     target_samples = int(collection_rate * self._seq_length)
+            skip = max(1.0 / collection_rate, 1)
+            frac_part = skip - math.floor(skip)
 
-        #     skip = max(1.0 / collection_rate, 1)
-        #     frac_part = skip - math.floor(skip)
+            self._skip_indices: List[int] = []
 
-        #     self._skip_indices: List[int] = []
+            index = 0
+            while index < self._seq_length:
+                self._skip_indices.append(index)
 
-        #     index = 0
-        #     while index < self._seq_length:
-        #         self._skip_indices.append(index)
+                if (target_samples - len(self._skip_indices)) == (self._seq_length - index - 1):
+                    index += 1
+                else:
+                    r = self._rand.uniform()
+                    if r > frac_part:
+                        index += int(math.floor(skip))
+                    else:
+                        index += int(math.ceil(skip))
 
-        #         if (target_samples - len(self._skip_indices)) == (self._seq_length - index - 1):
-        #             index += 1
-        #         else:
-        #             r = self._rand.uniform()
-        #             if r > frac_part:
-        #                 index += int(math.floor(skip))
-        #             else:
-        #                 index += int(math.ceil(skip))
+            self._skip_indices = self._skip_indices[:target_samples]
 
-        #     self._skip_indices = self._skip_indices[:target_samples]
-
-        #     self._skip_idx = len(self._skip_indices)-1
-        #     for (i, val) in enumerate(self._skip_indices):
-        #         if val >= old_idx:
-        #             self._skip_idx = i
-        #             break
+            self._skip_idx = len(self._skip_indices)-1
+            for (i, val) in enumerate(self._skip_indices):
+                if val >= old_idx:
+                    self._skip_idx = i
+                    break
             
         # self._collection_rate = collection_rate
         self._deviations = []
         self._means = []
 
     def collect(self, measurement: np.ndarray):
-        self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
-        self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
-        self._deviations.append(self._dev)
-        # self._means.append(self._mean)
-        self._means.append(measurement)
+        measurement = (measurement[0]**2 + measurement[1]**2 + measurement[2]**2)**0.5
+
+        # self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
+        # self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
+        self.mean = (1.0 - self._alpha) * self.mean + self._alpha * measurement
+        self.dev = (1.0 - self._beta) * self.dev + self._beta * np.abs(self.mean - measurement)
+        self._deviations.append(self.dev)
+        self._means.append(self.mean)
+        # self._means.append(measurement)
+        # self._means.append(measurement)
 
     def reset(self):
         super().reset()
         self._skip_idx = 0
 
-    def reset_params(self):
+    def reset_params(self, label):
         # print("====================================LABEL CHANGE================================================")
         if len(self._covs) == 0:
             return

@@ -77,5 +77,5 @@ class AdaptiveLiteSense(AdaptivePolicy):
         self._mean = np.zeros(shape=(self.num_features, ))  # [D]
         self._dev = np.zeros(shape=(self.num_features, ))  # [D]
 
-    def reset_params(self):
+    def reset_params(self, label):
         pass

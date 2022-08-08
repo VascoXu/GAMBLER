@@ -17,6 +17,7 @@ ADAPTIVE_UNIFORM_CMD = 'python run_policy.py --dataset {0} --policy adaptive_uni
 ADAPTIVE_BANDIT_CMD = 'python run_policy.py --dataset {0} --policy adaptive_bandit --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
 ADAPTIVE_BUDGET_CMD = 'python run_policy.py --dataset {0} --policy adaptive_budget --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
 ADAPTIVE_BUDGET_SIGMA_CMD = 'python run_policy.py --dataset {0} --policy adaptive_budget_sigma --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_TRAINING_CMD = 'python run_policy.py --dataset {0} --policy adaptive_training --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
 
 
 def run_command(cmd):
@@ -43,7 +44,7 @@ def get_distribution_str(dist, num_labels):
         res.append('(' + "-".join(temp) + ')')
 
     res.insert(0, 'Even')
-    res.append('Random')
+    # res.append('Random')
     res.append('Mean')
 
     return res
@@ -62,7 +63,7 @@ if __name__ == '__main__':
     dist = 60
     num_labels = 4
 
-    distributions = ['\'\'', '0', '1', '2', '3', 'rand']
+    distributions = ['\'\'', '0', '1', '2', '3']
     dist_labels = get_distribution_str(dist, num_labels)
 
     policies = {'uniform': UNIFORM_CMD, 
@@ -70,12 +71,13 @@ if __name__ == '__main__':
                 'adaptive_uniform': ADAPTIVE_UNIFORM_CMD,
                 'adaptive_budget': ADAPTIVE_BUDGET_CMD,
                 'adaptive_budget_sigma': ADAPTIVE_BUDGET_SIGMA_CMD,
+                'adaptive_training': ADAPTIVE_TRAINING_CMD,
                 }
 
     dists = get_distribution_str(dist, num_labels)
 
     # Run policies on different distributions
-    errors = {'uniform': [], 'deviation': [], 'adaptive_uniform': [], 'adaptive_budget': [], 'adaptive_budget_sigma': []}
+    errors = {'uniform': [], 'deviation': [], 'adaptive_uniform': [], 'adaptive_budget': [], 'adaptive_budget_sigma': [], 'adaptive_training': []}
     for dist in distributions:
         for policy in policies.keys():
             if dist == 'rand':
@@ -85,17 +87,17 @@ if __name__ == '__main__':
                 cmd = policies[policy].format(args.dataset, args.collection_rate, args.window_size, dist)
 
             res = run_command(cmd)
-            print(res)
+            print(res, policy, dist)
             error, num_collected, total_samples = res.split(',')
             errors[policy].append(float(error))
 
-    # # Calculate average error
+    # Calculate average error
     for policy in policies.keys():
         errors[policy].append(sum(errors[policy])/len(errors[policy]))
 
     fig, ax = plt.subplots()
     print(errors)
-    bar_plot(ax, errors, total_width=.8, single_width=.9, legend=['Uniform', 'Adaptive Threshold', 'Adaptive Uniform', 'Adaptive Bandit', 'Adaptive Sigma'])
+    bar_plot(ax, errors, total_width=.8, single_width=.9, legend=['Uniform', 'Adaptive Threshold', 'Adaptive Uniform', 'Adaptive Bandit', 'Adaptive Sigma', 'Adaptive Training'])
     plt.xticks(range(len(dist_labels)), dist_labels)
     plt.title(f'Average Label Error {args.collection_rate}')
     plt.show()

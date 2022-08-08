@@ -19,33 +19,46 @@ if __name__ == '__main__':
     dataset = 'epilepsy'
     dist = ''
     inputs, labels = load_data(dataset_name=dataset, fold=fold, dist=dist)
+    
+    unique_labels = set(labels)
 
-    num_seq, seq_length, num_features = inputs.shape
+    mp = {}
+    for label in unique_labels:
+        label_idx = np.where(labels == label)[0]
+        print(label_idx)
+        inputs = np.asarray([inputs[i] for i in label_idx])
+        labels = np.asarray([labels[i] for i in label_idx])
+        mp[label] = np.mean(inputs)/np.std(inputs)
+
+    print(mp)
+    
+
+    # num_seq, seq_length, num_features = inputs.shape
     
     # Parameters
-    _alpha = 0.7
-    _beta = 0.1
+    # _alpha = 0.7
+    # _beta = 0.1
     
-    data = []
-    count = 0
+    # data = []
+    # count = 0
 
-    for idx, (sequence, label) in enumerate(zip(inputs, labels)):
-        _mean = np.zeros(shape=(num_features, ))  # [D]
-        _dev = np.zeros(shape=(num_features, ))
-        for seq in sequence:
-            _mean = (1.0 - _alpha) * _mean + _alpha * seq
-            _dev = (1.0 - _beta) * _dev + _beta * np.abs(_mean - seq)
-            if count == 100:
-                data.append(sum(_dev))
-                count = 0
-            count += 1
+    # for idx, (sequence, label) in enumerate(zip(inputs, labels)):
+    #     _mean = np.zeros(shape=(num_features, ))  # [D]
+    #     _dev = np.zeros(shape=(num_features, ))
+    #     for seq in sequence:
+    #         _mean = (1.0 - _alpha) * _mean + _alpha * seq
+    #         _dev = (1.0 - _beta) * _dev + _beta * np.abs(_mean - seq)
+    #         if count == 100:
+    #             data.append(sum(_dev))
+    #             count = 0
+    #         count += 1
 
-    print(_mean)
+    # print(_mean)
     
-    with open('moving_dist.txt', 'w') as f:
-        for v in data:
-            f.write("%f\n" % (v))
+    # with open('moving_dist.txt', 'w') as f:
+    #     for v in data:
+    #         f.write("%f\n" % (v))
 
-    plt.plot(data, label='Moving Deviation')
-    plt.legend()
-    plt.show()
+    # plt.plot(data, label='Moving Deviation')
+    # plt.legend()
+    # plt.show()

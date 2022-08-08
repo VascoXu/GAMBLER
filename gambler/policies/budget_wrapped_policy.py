@@ -3,6 +3,7 @@ import numpy as np
 import os.path
 from collections import deque, OrderedDict
 from typing import Tuple, List, Dict, Any, Optional
+from gambler.policies.adaptive_phases import AdaptivePhases
 
 from gambler.utils.file_utils import read_json, read_pickle_gz, read_json_gz
 from gambler.utils.data_types import PolicyType, PolicyResult, CollectMode
@@ -11,6 +12,9 @@ from gambler.policies.adaptive_controller import AdaptiveController
 from gambler.policies.adaptive_deviation import AdaptiveDeviation
 from gambler.policies.adaptive_litesense import AdaptiveLiteSense
 from gambler.policies.adaptive_bandit import AdaptiveBandit
+from gambler.policies.adaptive_phases import AdaptivePhases
+from gambler.policies.adaptive_training import AdaptiveTraining
+from gambler.policies.adaptive_train import AdaptiveTrain
 from gambler.policies.bandit_budget import BanditBudget
 from gambler.policies.adaptive_sigma import AdaptiveSigma
 from gambler.policies.sigma_budget import SigmaBudget
@@ -18,6 +22,7 @@ from gambler.policies.adaptive_greedy import AdaptiveGreedy
 from gambler.policies.adaptive_heuristic import AdaptiveHeuristic
 from gambler.policies.adaptive_uniform import AdaptiveUniform
 from gambler.policies.uniform_policy import UniformPolicy
+
 
 class BudgetWrappedPolicy(Policy):
 
@@ -83,6 +88,10 @@ class BudgetWrappedPolicy(Policy):
     def threshold(self) -> float:
         return self._policy.threshold
 
+    @property
+    def training(self):
+        return self._policy.training if self._policy.policy_type ==  PolicyType.ADAPTIVE_TRAIN else []
+
     def set_budget(self, budget: float):
         self._policy.set_budget(budget)
         self._policy.set_update(True)
@@ -113,8 +122,8 @@ class BudgetWrappedPolicy(Policy):
     def reset(self):
         self._policy.reset()
 
-    def reset_params(self):
-        self._policy.reset_params()
+    def reset_params(self, label):
+        self._policy.reset_params(label)
 
     def init_for_experiment(self, num_sequences: int):
         self._num_sequences = num_sequences
@@ -244,6 +253,12 @@ def make_policy(name: str,
             cls = BanditBudget
         elif name == 'adaptive_budget_sigma':
             cls = SigmaBudget
+        elif name == 'adaptive_phases':
+            cls = AdaptivePhases
+        elif name == 'adaptive_training':
+            cls = AdaptiveTraining
+        elif name == 'adaptive_train':
+            cls = AdaptiveTrain
         else:
             raise ValueError('Unknown adaptive policy with name: {0}'.format(name))
 

@@ -258,7 +258,7 @@ class BanditBudget(AdaptiveLiteSense):
         super().reset()
         self._skip_idx = 0
 
-    def reset_params(self):
+    def reset_params(self, label):
         pass
         # print("====================================LABEL CHANGE================================================")
         # for i in range(len(self._actions)):

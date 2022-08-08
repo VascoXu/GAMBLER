@@ -1,7 +1,9 @@
+from gc import collect
 import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import os.path
+import csv
 import h5py
 import random
 from argparse import ArgumentParser
@@ -40,11 +42,14 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--policy', type=str, required=True)
     parser.add_argument('--collection-rate', type=float, required=True)
+    parser.add_argument('--classes', type=int, nargs='+')
     parser.add_argument('--epsilon', type=float, default=0.0)           # used for debugging
     parser.add_argument('--randomize', type=str, default='')            # used for debugging 
     parser.add_argument('--block-size', type=int, default=1)            # used for debugging
     parser.add_argument('--labels', type=str, default='all')            # used for debugging
     parser.add_argument('--distribution', type=str, default='')         # used for debugging
+    parser.add_argument('--debug', action='store_true')                 # used for debugging
+    parser.add_argument('--fold', default='test')                       # used for debugging
     parser.add_argument('--should-enforce-budget', action='store_true')
     parser.add_argument('--save-dataset', action='store_true')
     parser.add_argument('--output-folder', type=str, default='')
@@ -58,8 +63,7 @@ if __name__ == '__main__':
     random.seed(42)
 
     # Load the data
-    fold = 'test'
-    inputs, labels = load_data(dataset_name=args.dataset, fold=fold, dist=args.distribution)
+    inputs, labels = load_data(dataset_name=args.dataset, fold=args.fold, dist=args.distribution)
     labels = labels.reshape(-1)
 
     # Rearrange data for experiments
@@ -88,6 +92,7 @@ if __name__ == '__main__':
     estimate_list: List[np.ndarray] = []
     collected: List[List[int]] = []
     collected_counts = defaultdict(list)
+    training_data: List[List[float]] = []
     
     collection_ratios: List[List[float]] = []
     window_labels: List[int] = []
@@ -110,7 +115,7 @@ if __name__ == '__main__':
 
         # Reset parameters on label change
         if label != previous_label:
-            policy.reset_params()    
+            policy.reset_params(label)
         previous_label = label
 
         # Pack information about window size
@@ -140,7 +145,6 @@ if __name__ == '__main__':
         else:
             error = 1
 
-
         # Record the policy results
         errors.append(error)
         measurements.append(policy_result.measurements)
@@ -148,25 +152,33 @@ if __name__ == '__main__':
         collected.append(policy_result.collected_indices)
         collection_ratios.append(policy_result.collection_ratios)
 
+        training_data = training_data + policy_result.training_data
+
         collected_within_window = policy_result.collected_within_window
         curr_window_size = policy_result.curr_window_size
 
         window_labels.append([labels[idx]]*len(policy_result.collection_ratios))
 
+    # with open(f'{args.fold}.csv', 'a') as f:
+    #     csvwriter = csv.writer(f)
+    #     csvwriter.writerows(training_data)
 
     num_measurements = num_seq * seq_length
     num_samples = num_measurements
     num_collected = sum(len(c) for c in collected[:collected_seq])
 
     avg_cr = 0
-    for i in range(4):
+    for i in set(labels):
         label_idx = np.where(labels == i)[0]
         crs = [collection_ratios[i] for i in label_idx]
         crs = [c for cr in crs for c in cr]
-        # print(crs, len(crs))
+        # print(sum(crs)/len(crs))
 
     collection_ratios = [cr for collection_ratio in collection_ratios for cr in collection_ratio] # flatten
     reconstructed = np.vstack([np.expand_dims(r, axis=0) for r in estimate_list])  # [N, T, D]
+
+    for c in collection_ratios:
+        print(c)
 
     window_labels = [l for label in window_labels for l in label] # flatten
 
@@ -225,14 +237,11 @@ if __name__ == '__main__':
         label_errors = [errors [i] for i in label_idx]
         avg_error = sum(label_errors)/len(label_errors)
         error_dict[label] = avg_error
-    
-    # print(error_dict)
+    print(error_dict)
 
     # Calculate different error metrics
     avg_seq_error = sum(errors)/len(errors)
     avg_label_error = sum(error_dict.values())/len(error_dict)
-
-    # print("AVG LABEL ERROR: ", avg_label_error)
 
     # Log information for graphing
     if len(args.output_folder) > 0:
@@ -260,6 +269,7 @@ if __name__ == '__main__':
     # print(f'Sampling Ratio: {num_collected}/{num_samples} ({sampling_ratio})')
     # print(f'Missed Sequences: {collected_seqs}/{num_seq}')
 
+    # PRINT
     print('{0:.5f},{1},{2} ({3})'.format(mae, num_collected, num_samples, sampling_ratio))
     # print('{0:.5f},{1},{2} ({3}) Missed Seqs: {4}/{5}'.format(avg_label_error, num_collected, num_samples, sampling_ratio, collected_seqs, num_seq))
     # print('MAE: {0:.7f}, Norm MAE: {1:.5f}, RMSE: {2:.5f}, Norm RMSE: {3:.5f}, R^2: {4:.5f}'.format(mae, norm_mae, rmse, norm_rmse, r2))

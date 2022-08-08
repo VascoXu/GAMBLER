@@ -19,7 +19,7 @@ class AdaptiveDeviation(AdaptiveLiteSense):
         self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
 
         norm = np.sum(self._dev)
-        
+
         if norm > self._threshold:
             self._current_skip = max(int(self._current_skip / 2), self.min_skip)
         else:

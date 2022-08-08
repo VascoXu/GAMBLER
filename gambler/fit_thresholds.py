@@ -46,12 +46,15 @@ def execute_on_batch(policy: BudgetWrappedPolicy, batch: np.ndarray, energy_marg
 
     for seq_idx, sequence in enumerate(batch):
         policy.reset()
-        policy_result = run_policy(policy=policy, sequence=sequence, window=0, seq_num=seq_idx, should_enforce_budget=True)
+        policy_result = run_policy(policy=policy, sequence=sequence, window=(0,0), seq_num=seq_idx, should_enforce_budget=True)
 
         # Reconstruct the sequence elements, [T, D]
-        reconstructed = reconstruct_sequence(measurements=policy_result.measurements,
-                                             collected_indices=policy_result.collected_indices,
-                                             seq_length=seq_length)
+        if policy_result.num_collected == 0:
+            reconstructed = np.zeros(sequence.shape)
+        else:
+            reconstructed = reconstruct_sequence(measurements=policy_result.measurements,
+                                                collected_indices=policy_result.collected_indices,
+                                                seq_length=seq_length)
 
         estimated_list.append(np.expand_dims(reconstructed, axis=0))
 
@@ -131,9 +134,6 @@ def fit(policy: BudgetWrappedPolicy,
             print('Best Error: {0:.7f}, Best Threshold: {1:.7f}'.format(best_error, best_threshold), end='\r')
 
         # Get the search direction based on the budget use
-        budget = policy.budget
-        consumed_energy = policy.consumed_energy
-
         if did_exhaust:
             lower = current  # Reduce the energy consumption
         else:
@@ -195,7 +195,6 @@ if __name__ == '__main__':
     parser.add_argument('--policy', type=str, required=True, choices=['adaptive_heuristic', 'adaptive_deviation'])
     parser.add_argument('--collection-rates', type=float, nargs='+', required=True)
     parser.add_argument('--collect', type=str, required=True, choices=['tiny', 'low', 'med', 'high'])
-    parser.add_argument('--encryption', type=str, required=True, choices=['stream', 'block'])
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--batches-per-trial', type=int, default=3)
     parser.add_argument('--should-print', action='store_true')
@@ -215,8 +214,7 @@ if __name__ == '__main__':
     max_threshold = np.max(np.sum(np.abs(inputs), axis=-1)) + 1000.0
 
     # Load the parameter files
-    encryption = args.encryption
-    output_file = os.path.join('saved_models', args.dataset, 'thresholds_{0}.json.gz'.format(encryption))
+    output_file = os.path.join('saved_models', args.dataset, 'thresholds_{0}.json.gz'.format('test'))
     threshold_map = read_json_gz(output_file) if os.path.exists(output_file) else dict()
 
     policy_name = args.policy
@@ -247,11 +245,8 @@ if __name__ == '__main__':
                                      seq_length=seq_length,
                                      num_seq=num_seq,
                                      num_features=num_features,
-                                     encryption_mode=encryption,
                                      collect_mode=collect_mode,
-                                     encoding='standard',
-                                     dataset=args.dataset,
-                                     should_compress=False)
+                                     dataset=args.dataset)
 
         final_threshold = None
         energy_margin = MARGIN_FACTOR
