@@ -42,18 +42,22 @@ if __name__ == '__main__':
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--policy', type=str, required=True)
     parser.add_argument('--collection-rate', type=float, required=True)
-    parser.add_argument('--classes', type=int, nargs='+')
+    parser.add_argument('--classes', type=int, nargs='+', default=[])
     parser.add_argument('--epsilon', type=float, default=0.0)           # used for debugging
     parser.add_argument('--randomize', type=str, default='')            # used for debugging 
     parser.add_argument('--block-size', type=int, default=1)            # used for debugging
     parser.add_argument('--labels', type=str, default='all')            # used for debugging
     parser.add_argument('--distribution', type=str, default='')         # used for debugging
     parser.add_argument('--debug', action='store_true')                 # used for debugging
+    parser.add_argument('--train', action='store_true')                 # used for debugging
     parser.add_argument('--fold', default='test')                       # used for debugging
+    parser.add_argument('--model', type=str, default='')            # used for debugging
+    parser.add_argument('--threshold', type=str, default='')            # used for debugging
+    parser.add_argument('--graph-cr', action='store_true')
     parser.add_argument('--should-enforce-budget', action='store_true')
     parser.add_argument('--save-dataset', action='store_true')
     parser.add_argument('--output-folder', type=str, default='')
-    parser.add_argument('--window-size', type=int, default=0)
+    parser.add_argument('--window-size', type=int, default=100)
     parser.add_argument('--max-skip', type=int, default=0)
     parser.add_argument('--feature', type=int, default=0)
     parser.add_argument('--max-num-samples', type=int)
@@ -84,6 +88,8 @@ if __name__ == '__main__':
                                  collect_mode='tiny',
                                  max_window_size=args.window_size,
                                  should_compress=False,
+                                 model=args.model,
+                                 thresh=args.threshold,
                                  epsilon=args.epsilon,
                                  max_skip=args.max_skip)
 
@@ -94,6 +100,7 @@ if __name__ == '__main__':
     collected_counts = defaultdict(list)
     training_data: List[List[float]] = []
     
+    collected_nums: List[int] = []
     collection_ratios: List[List[float]] = []
     window_labels: List[int] = []
 
@@ -111,12 +118,12 @@ if __name__ == '__main__':
         if idx >= max_num_seq:
             break
 
-        policy.reset()
+        # policy.reset()
 
         # Reset parameters on label change
-        if label != previous_label:
-            policy.reset_params(label)
-        previous_label = label
+        # if label != previous_label:
+        #     policy.reset_params(label)
+        # previous_label = label
 
         # Pack information about window size
         window = (collected_within_window, curr_window_size)
@@ -150,26 +157,33 @@ if __name__ == '__main__':
         measurements.append(policy_result.measurements)
         estimate_list.append(reconstructed)
         collected.append(policy_result.collected_indices)
+        collected_nums.append(len(policy_result.measurements))
         collection_ratios.append(policy_result.collection_ratios)
 
-        training_data = training_data + policy_result.training_data
+        training_data += policy_result.training_data
 
         collected_within_window = policy_result.collected_within_window
         curr_window_size = policy_result.curr_window_size
 
         window_labels.append([labels[idx]]*len(policy_result.collection_ratios))
 
-    # with open(f'{args.fold}.csv', 'a') as f:
-    #     csvwriter = csv.writer(f)
-    #     csvwriter.writerows(training_data)
+    # Save training data
+    if args.train:
+        with open(f'train/{args.dataset}/{args.fold}.csv', 'a') as f:
+            csvwriter = csv.writer(f)
+            csvwriter.writerows(training_data)
 
     num_measurements = num_seq * seq_length
     num_samples = num_measurements
     num_collected = sum(len(c) for c in collected[:collected_seq])
 
-    avg_cr = 0
+    # Print average collection rate for individual labels
     for i in set(labels):
         label_idx = np.where(labels == i)[0]
+
+        cn = [collected_nums[i] for i in label_idx]
+        # print(sum(cn))
+
         crs = [collection_ratios[i] for i in label_idx]
         crs = [c for cr in crs for c in cr]
         # print(sum(crs)/len(crs))
@@ -177,44 +191,21 @@ if __name__ == '__main__':
     collection_ratios = [cr for collection_ratio in collection_ratios for cr in collection_ratio] # flatten
     reconstructed = np.vstack([np.expand_dims(r, axis=0) for r in estimate_list])  # [N, T, D]
 
-    for c in collection_ratios:
-        print(c)
+    # Graph collection rate for each window
+    if args.graph_cr:
+        print(collection_ratios)
+        # plt.plot(collection_ratios, label='Collection Rate')
+        # plt.title(f'{args.policy.upper()} ({args.dataset.upper()}): Collection Rate over Time')
+        # plt.legend()
+        # plt.show()
 
     window_labels = [l for label in window_labels for l in label] # flatten
-
-    for label in set(window_labels):
-        idx = max(loc for loc, val in enumerate(window_labels) if val == label)
-        # print(idx)
 
     # if args.save_dataset:
     # Write to reconstructed dataset
     out_folder = f'{args.dataset}/reconstructed'
     out_filename = f'reconstructed_{args.policy}_{args.distribution}'
     write_dataset(reconstructed, labels, out_filename, out_folder) 
-
-    """
-    measured = np.vstack([np.expand_dims(r, axis=0) for r in measurements])  # [N, T, D]
-    measured = measured.reshape(-1, num_features)
-
-    measured = np.asarray([r for measurement in measurements for r in measurement])
-    indices = [idx for idx in collected]
-    collected_indices = []
-    for i,idx in enumerate(indices):
-        for j in idx:
-            collected_indices.append(j + seq_length * i)
-
-    # Remove samples collected after budget was exhausted
-    has_exhausted_budget = num_collected/num_measurements >= args.collection_rate
-    if args.should_enforce_budget and has_exhausted_budget:
-        oversampled_count = int(num_collected - args.collection_rate * num_measurements) + 10
-
-        measured = measured[:len(measured)-oversampled_count]
-        collected_indices = collected_indices[:len(collected_indices)-oversampled_count]
-
-    reconstructed = reconstruct_sequence(measurements=measured,
-                                    collected_indices=collected_indices,
-                                    seq_length=seq_length*num_seq)
-    """
 
     reconstructed = reconstructed.reshape(-1, num_features)
 
@@ -237,7 +228,7 @@ if __name__ == '__main__':
         label_errors = [errors [i] for i in label_idx]
         avg_error = sum(label_errors)/len(label_errors)
         error_dict[label] = avg_error
-    print(error_dict)
+    # print(error_dict)
 
     # Calculate different error metrics
     avg_seq_error = sum(errors)/len(errors)

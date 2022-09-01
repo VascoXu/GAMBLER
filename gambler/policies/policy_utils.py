@@ -64,7 +64,7 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, window: tuple,
             collection_ratio = (collected_within_window/policy.max_window_size)
             collection_ratios.append(collection_ratio)
 
-            # Update threshold based on control theory
+            # Update policy
             if policy.policy_type == PolicyType.ADAPTIVE_CONTROLLER or policy.policy_type == PolicyType.ADAPTIVE_GREEDY or policy.policy_type == PolicyType.ADAPTIVE_BANDIT or policy.policy_type == PolicyType.ADAPTIVE_SIGMA or policy.policy_type == PolicyType.BANDIT_BUDGET or policy.policy_type == PolicyType.SIGMA_BUDGET or policy.policy_type == PolicyType.ADAPTIVE_TRAINING or policy.policy_type == PolicyType.ADAPTIVE_TRAIN:
                 policy.update(collection_ratio, seq_idx)
 

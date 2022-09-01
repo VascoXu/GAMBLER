@@ -13,6 +13,7 @@ class UniformPolicy(Policy):
 
     def __init__(self,
                  collection_rate: float,
+                 dataset: str,
                  num_seq: int,
                  seq_length: int,
                  num_features: int,

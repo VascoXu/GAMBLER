@@ -165,6 +165,7 @@ def make_policy(name: str,
 
     if name == 'uniform':
         return UniformPolicy(collection_rate=collection_rate,
+                             dataset=dataset,
                              num_seq=num_seq,
                              num_features=num_features,
                              seq_length=seq_length,
@@ -172,26 +173,27 @@ def make_policy(name: str,
                              max_window_size=kwargs['max_window_size'])
     elif name.startswith('adaptive'):
         # Look up the threshold path
-        threshold_path = os.path.join(base, '../saved_models', dataset, 'thresholds_block.json.gz')
+        # threshold_path = os.path.join(base, '../saved_models', dataset, 'thresholds_block.json.gz')
+        threshold_path = kwargs['thresh'] if kwargs['thresh'] != '' else os.path.join(base, '../saved_models', dataset, 'thresholds_stream.json.gz')
 
-        temp_name = name # DEBUG
-        name = 'adaptive_deviation'
+        temp_name = name
+        if name == 'adaptive_train' or name == 'adaptive_uniform':
+            name = 'adaptive_deviation'
 
         did_find_threshold = False
         threshold_rate = collection_rate
         rate_str = str(round(threshold_rate, 2))
 
         if not os.path.exists(threshold_path):
-            print('WARNING: No threshold path exists.')
+            # print('WARNING: No threshold path exists.')
             threshold = 0.0
         else:
             thresholds = read_json_gz(threshold_path)
             if (name not in thresholds) or (collect_mode not in thresholds[name]) or (rate_str not in thresholds[name][collect_mode]):
-                print('WARNING: No threshold path exists.')
+                # print('WARNING: No threshold path exists.')
                 threshold = 0.0
             else:
                 threshold = thresholds[name][collect_mode][rate_str]
-                # print("Threshold: ", threshold)
                 did_find_threshold = True
 
         # Apply the optional data-specific threshold factor
@@ -221,17 +223,15 @@ def make_policy(name: str,
             min_skip = 0
 
         # Set the window size
-        if 'max_window_size' in kwargs:
-            max_window_size = kwargs['max_window_size']
-        else:
-            max_window_size = 0
+        max_window_size = kwargs['max_window_size'] if 'max_window_size' in kwargs else 0
+
+        # Reset name
+        name = temp_name
 
         # For 'padded' policies, read the standard test log (if exists) to get the maximum number of collected values.
         # This is an impractical policy to use, as it requires prior knowledge of what the policy will do on the test
         # set. Nevertheless, we use this strategy to provide an 'ideal' baseline.
         max_collected = None
-
-        name = temp_name # DEBUG
 
         if name == 'adaptive_heuristic':
             cls = AdaptiveHeuristic
@@ -263,6 +263,7 @@ def make_policy(name: str,
             raise ValueError('Unknown adaptive policy with name: {0}'.format(name))
 
         return cls(collection_rate=collection_rate,
+                   dataset=dataset,
                    threshold=threshold, 
                    num_seq=num_seq,
                    seq_length=seq_length,
@@ -270,9 +271,9 @@ def make_policy(name: str,
                    max_skip=max_skip_value,
                    min_skip=min_skip,
                    collect_mode=CollectMode[collect_mode.upper()],
+                   model=kwargs['model'],
                    max_collected=max_collected,
                    max_window_size=max_window_size,
-                   epsilon=0.8
                    )
     else:
         raise ValueError('Unknown policy with name: {0}'.format(name))

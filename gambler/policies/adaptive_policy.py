@@ -12,6 +12,7 @@ class AdaptivePolicy(Policy):
 
     def __init__(self,
                  collection_rate: float,
+                 dataset: str,
                  threshold: float,
                  num_seq: int,
                  seq_length: int,
@@ -19,8 +20,10 @@ class AdaptivePolicy(Policy):
                  min_skip: int,
                  max_skip: int,
                  collect_mode: CollectMode,
+                 model: str,
                  max_collected: Optional[int] = None,
-                 max_window_size: int = 0):
+                 max_window_size: int = 0,
+                 epsilon:int = 0.6):
         super().__init__(collection_rate=collection_rate,
                          num_seq=num_seq,
                          num_features=num_features,

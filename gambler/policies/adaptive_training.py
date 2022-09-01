@@ -21,12 +21,14 @@ from gambler.utils.action import Action
 from gambler.utils.distribution import load_distribution
 from gambler.utils.file_utils import read_pickle_gz, save_json_gz, save_pickle_gz, read_json_gz
 from gambler.utils.loading import load_data
+from gambler.utils.measurements import translate_measurement
 
 
 class AdaptiveTraining(AdaptiveLiteSense):
 
     def __init__(self,
                  collection_rate: float,
+                 dataset: str,
                  threshold: float,
                  num_seq: int,
                  seq_length: int,
@@ -34,11 +36,12 @@ class AdaptiveTraining(AdaptiveLiteSense):
                  max_skip: int,
                  min_skip: int,
                  collect_mode: CollectMode,
+                 model: str,
                  max_collected: Optional[int] = None,
                  max_window_size: int = 0,
-                 epsilon: int = 0.2
                  ):
         super().__init__(collection_rate=collection_rate,
+                         dataset=dataset,
                          threshold=threshold,
                          num_seq=num_seq,
                          seq_length=seq_length,
@@ -46,16 +49,21 @@ class AdaptiveTraining(AdaptiveLiteSense):
                          max_skip=max_skip,
                          min_skip=min_skip,
                          collect_mode=collect_mode,
+                         model=model,
                          max_collected=max_collected,
                          max_window_size=max_window_size)
-        # Policy parameters
+        
+        # Default parameters
         self._seq_length = seq_length
-        self._distribution = load_distribution('moving_dist.txt')
-        self._interp = np.interp(self._distribution, [min(self._distribution), max(self._distribution)], [0, 100])
-        self._deviations = []
-        self._means = []
+        self._dataset = dataset
 
-        self._window = 100
+        # Policy parameters
+        self._moving_dev = 0
+        self._moving_mean = 0
+        self._dev_count = 0
+        self._mean_count = 0
+
+        self._window = max_window_size
 
         self._total_samples = seq_length*num_seq
         self._total_time = self._total_samples
@@ -65,43 +73,11 @@ class AdaptiveTraining(AdaptiveLiteSense):
         self.mean = 0
         self.dev = 0
 
-        # Default parameters
         self._collection_rate = collection_rate # start at uniform collection rate
-
-        # Load collection rates for phases
-        base = os.path.dirname(__file__)
-        collection_rates_path = os.path.join(base, '../saved_models', 'epilepsy', 'collection_rates.json.gz')
-        self._collection_rates = read_json_gz(collection_rates_path)
-
-        # Fit LinearRegression model
-        # X = []
-        # y = []
-        # for key, value in self._collection_rates.items():
-        #     for i, cr in enumerate(value):
-        #         X.append([float(key), i])
-        #         y.append(cr)
-
-        # Load validation set 
-        validation_rates_path = os.path.join(base, '../saved_models', 'epilepsy', 'collection_rates_validation.json.gz')
-        self._collection_rates = read_json_gz(validation_rates_path)
-        X_val = []
-        y_val = []
-        for key, value in self._collection_rates.items():
-            for i, cr in enumerate(value):
-                X_val.append([float(key), i])
-                y_val.append(cr)
-
-        # Load training data
-        # training_set = pd.read_csv('train.csv')
-        # X = training_set.iloc[:, 0:2].values.tolist()
-        # y = training_set.iloc[:, 2:].values.ravel()
-
-        # X_train, X_test, y_train, y_test = train_test_split(X, y, random_state=42, test_size=0.33)
-        # self.model = RandomForestRegressor(max_depth=8, random_state=0).fit(X_train, y_train)
-        self.model = pickle.load(open('saved_models/rf', 'rb'))
-        # pickle.dump(self.model, open('saved_models/rf', 'wb'))
-
-        self._label_idx = -1
+        if model == '':
+            self.model = pickle.load(open(f'saved_models/{dataset}/random_forest/rf', 'rb'))
+        else:
+            self.model = pickle.load(open(model, 'rb'))
 
         # Fit default uniform policy
         target_samples = int(self._collection_rate * seq_length)
@@ -128,7 +104,6 @@ class AdaptiveTraining(AdaptiveLiteSense):
         self._skip_idx = 0
 
         self._window_size = 0
-        self._max_window_size = max_window_size
 
     @property
     def policy_type(self) -> PolicyType:
@@ -143,25 +118,29 @@ class AdaptiveTraining(AdaptiveLiteSense):
 
     def update(self, collection_ratio: float, seq_idx: int):
         # Update estimate mean reward            
-        _dev = sum(self._deviations)/len(self._deviations)
-        _mean = sum(self._means)/len(self._means)
-        cov = (_dev/_mean)/0.18
+        _dev = 0 if self._dev_count == 0 else self._moving_dev / self._dev_count
+        _mean = 0 if self._mean_count == 0 else self._moving_mean / self._mean_count
+        cov = 0 if _mean == 0 else (_dev/_mean)
 
         # Update time
-        self._total_samples = self._total_samples - self._window
+        self._total_samples -= self._window
         leftover = self._budget - self._samples_collected
         
-        budget_left = leftover / self._total_samples
+        budget_left = leftover / self._total_samples if self._total_samples > 0 else 0
 
         time_left = self._total_samples
         time_spent = (self._total_time - self._total_samples)
         alpha = time_left / self._total_time
         beta = time_spent / self._total_time
 
+        # Determine collection rates
         global_cr = self.model.predict(np.array([cov, self._collection_rate]).reshape(1, -1))[0]
         local_cr = self.model.predict(np.array([cov, budget_left]).reshape(1, -1))[0]
 
-        collection_rate = (alpha * global_cr) + (beta * local_cr)
+        if budget_left > 1:
+            collection_rate = 1.0
+        else:
+            collection_rate = (alpha * global_cr) + (beta * local_cr)
 
         # Change uniform collection rate
         if self._skip_idx < len(self._skip_indices):
@@ -194,27 +173,27 @@ class AdaptiveTraining(AdaptiveLiteSense):
                     self._skip_idx = i
                     break
 
-        self._deviations = []
+        # Reset parameters
+        self._moving_dev = 0
+        self._dev_count = 0
 
     def collect(self, measurement: np.ndarray):
-        measurement = (measurement[0]**2 + measurement[1]**2 + measurement[2]**2)**0.5
+        measurement = translate_measurement(measurement, self._dataset)
 
-        # self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
-        # self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
         self.mean = (1.0 - self._alpha) * self.mean + self._alpha * measurement
         self.dev = (1.0 - self._beta) * self.dev + self._beta * np.abs(self.mean - measurement)
-
-        # self._deviations.append(sum(self._dev))
-        self._deviations.append(self.dev)
-        self._means.append(self.mean)
+        
+        # Update policy parameters
+        self._moving_dev += self.dev
+        self._moving_mean += self.mean
+        self._dev_count += 1
+        self._mean_count += 1
 
         self._samples_collected += 1
-
 
     def reset(self):
         super().reset()
         self._skip_idx = 0
 
     def reset_params(self, label):
-        # print("====================================LABEL CHANGE================================================")
-        self._label_idx = label
+        pass

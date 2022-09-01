@@ -9,15 +9,15 @@ import itertools
 
 from gambler.analysis.plot_utils import bar_plot
 
-ADAPTIVE_STATIC_CMD = 'python run_policy.py --dataset {0} --policy adaptive_deviation --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-UNIFORM_CMD = 'python run_policy.py --dataset {0} --policy uniform --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-ADAPTIVE_CONTROLLER_CMD = 'python run_policy.py --dataset {0} --policy adaptive_controller --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-ADAPTIVE_GREEDY_CMD = 'python run_policy.py --dataset {0} --policy adaptive_greedy --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-ADAPTIVE_UNIFORM_CMD = 'python run_policy.py --dataset {0} --policy adaptive_uniform --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-ADAPTIVE_BANDIT_CMD = 'python run_policy.py --dataset {0} --policy adaptive_bandit --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-ADAPTIVE_BUDGET_CMD = 'python run_policy.py --dataset {0} --policy adaptive_budget --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-ADAPTIVE_BUDGET_SIGMA_CMD = 'python run_policy.py --dataset {0} --policy adaptive_budget_sigma --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
-ADAPTIVE_TRAINING_CMD = 'python run_policy.py --dataset {0} --policy adaptive_training --collection-rate {1} --window {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_STATIC_CMD = 'python run_policy.py --dataset {0} --policy adaptive_deviation --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
+UNIFORM_CMD = 'python run_policy.py --dataset {0} --policy uniform --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_CONTROLLER_CMD = 'python run_policy.py --dataset {0} --policy adaptive_controller --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_GREEDY_CMD = 'python run_policy.py --dataset {0} --policy adaptive_greedy --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_UNIFORM_CMD = 'python run_policy.py --dataset {0} --policy adaptive_uniform --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_BANDIT_CMD = 'python run_policy.py --dataset {0} --policy adaptive_bandit --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_BUDGET_CMD = 'python run_policy.py --dataset {0} --policy adaptive_budget --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_BUDGET_SIGMA_CMD = 'python run_policy.py --dataset {0} --policy adaptive_budget_sigma --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
+ADAPTIVE_TRAINING_CMD = 'python run_policy.py --dataset {0} --policy adaptive_training --collection-rate {1} --window-size {2} --distribution {3} --should-enforce-budget'
 
 
 def run_command(cmd):

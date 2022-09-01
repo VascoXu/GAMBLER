@@ -54,8 +54,9 @@ def bar_plot(ax, data, colors=None, total_width=0.8, single_width=1, legend=''):
     # The width of a single bar
     bar_width = total_width / n_bars
 
-    # List containing handles for the drawn bars, used for the legend
+    # List containing handles for the drawn bars, used for the legend and drawing text
     bars = []
+    all_bars = []
 
     # Iterate over all data
     for i, (name, values) in enumerate(data.items()):
@@ -65,10 +66,18 @@ def bar_plot(ax, data, colors=None, total_width=0.8, single_width=1, legend=''):
         # Draw a bar for every value of that type
         for x, y in enumerate(values):
             bar = ax.bar(x + x_offset, y, width=bar_width * single_width, color=colors[i % len(colors)])
+            
+            # Add handle for drawn bar for drawing text
+            all_bars.append(bar[0])
 
         # Add a handle to the last drawn bar, which we'll need for the legend
         bars.append(bar[0])
 
     # Draw legend if we need
     if legend:
-        ax.legend(bars, legend, loc=4)
+        ax.legend(bars, legend, loc=1)
+
+    # Draw values on top of bar
+    for bar in all_bars:
+        y = bar.get_height()
+        plt.text(bar.get_x(), y + 0.01, str(round(float(y), 3)), fontsize=8)

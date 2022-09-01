@@ -26,6 +26,7 @@ def write_dataset(inputs, labels, output_folder):
         output_dataset.write_direct(partition_output)
 
 if __name__ == '__main__':
+    """Join training and testing datasets"""
     parser = ArgumentParser()
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--window-size', type=int, default=200)
@@ -46,4 +47,5 @@ if __name__ == '__main__':
     # Unpack the shape (again to account for possible modifications in dataset)
     num_seq, seq_length, num_features = inputs.shape
 
+    # Print updated dataset size
     print(num_seq, seq_length, num_features)

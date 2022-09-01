@@ -18,6 +18,7 @@ class AdaptiveSigma(AdaptiveLiteSense):
 
     def __init__(self,
                  collection_rate: float,
+                 dataset: str,
                  threshold: float,
                  num_seq: int,
                  seq_length: int,
@@ -25,24 +26,25 @@ class AdaptiveSigma(AdaptiveLiteSense):
                  max_skip: int,
                  min_skip: int,
                  collect_mode: CollectMode,
+                 model: str,
                  max_collected: Optional[int] = None,
                  max_window_size: int = 0,
                  epsilon: int = 0.2
                  ):
         super().__init__(collection_rate=collection_rate,
+                         dataset=dataset,
                          threshold=threshold,
                          num_seq=num_seq,
                          seq_length=seq_length,
                          num_features=num_features,
                          max_skip=max_skip,
                          min_skip=min_skip,
+                         model=model,
                          collect_mode=collect_mode,
                          max_collected=max_collected,
                          max_window_size=max_window_size)
         # Policy parameters
         self._seq_length = seq_length
-        self._distribution = load_distribution('moving_dist.txt')
-        self._interp = np.interp(self._distribution, [min(self._distribution), max(self._distribution)], [0, 100])
         self._deviations = []
         self._means = []
         self._covs = []
@@ -96,15 +98,10 @@ class AdaptiveSigma(AdaptiveLiteSense):
         if len(self._deviations) == 0:
             return
 
-        # Calculate percentile of observed deviation
-        dev = np.interp(sum(self._dev), [min(self._distribution), max(self._distribution)], [0, 100])
-        percentile = np.percentile(self._interp, dev)
-
         # Update estimate mean reward            
         _dev = sum(self._deviations)/len(self._deviations)
         _mean = sum(self._means)/len(self._means)
         cov = (_dev/_mean)/0.18
-        print(sum(self._covs)/len(self._covs))
         collection_rate = round(min(cov, 1), 1)
 
         # Update collection rate
@@ -162,4 +159,3 @@ class AdaptiveSigma(AdaptiveLiteSense):
 
     def reset_params(self, label):
         pass
-        # print("====================================LABEL CHANGE================================================")

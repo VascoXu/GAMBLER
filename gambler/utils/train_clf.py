@@ -13,7 +13,7 @@ if __name__ == '__main__':
     args = parser.parse_args()
 
     fold = 'reconstructed'
-    train_inputs, train_labels = load_data(dataset_name='epilepsy', fold='validation', dist='')
+    train_inputs, train_labels = load_data(dataset_name=args.dataset, fold='validation', dist='')
     train_labels = train_labels.reshape(-1)
 
     # Reshape train input vector

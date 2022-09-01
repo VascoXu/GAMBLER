@@ -3,20 +3,14 @@ import random
 
 
 def get_data(args, inputs, labels):
-    return args_data(args, inputs, labels)
-
-def args_data(args, inputs, labels):
     # Unpack the shape
     num_seq, seq_length, num_features = inputs.shape
 
-    if args.labels == 'test':
-        # classes = [2, 1, 1, 1, 1, 2, 1]
-        classes = [1, 1, 1, 2, 1, 1, 2, 1]
-        # classes = [2, 2, 1, 2, 2, 1, 2, 2, 1]
-
+    if len(args.classes) > 0:
+        """Specify classes"""
         label_parts = []
         input_parts = []
-        for label in classes:
+        for label in args.classes:
             label_idx = np.where(labels == label)[0]
             input_parts.append(np.asarray([inputs[i] for i in label_idx]))
             label_parts.append(np.asarray([labels[i] for i in label_idx]))
@@ -57,6 +51,45 @@ def args_data(args, inputs, labels):
         labels = np.asarray([labels[i] for i in parts])
         
         return (inputs, labels)
+
+    elif args.randomize == 'test':
+        """Generate random test cases"""
+
+        random.seed()
+
+        input_parts = []
+        label_parts = []
+
+        unique_labels = list(set(labels))
+        dist_length = random.randint(20, 25)
+        debug_length = dist_length
+
+        debug = []
+
+        while dist_length > 0:
+            # Select random label and corresponding length
+            label = random.choice(unique_labels)
+            label_length = random.randint(0, min(dist_length, 10))
+            print(label_length, label)
+
+            label_idx = np.where(labels == label)[0]
+            for i in range(label_length):
+                input_parts.append(np.asarray([inputs[i] for i in label_idx]))
+                label_parts.append(np.asarray([labels[i] for i in label_idx]))
+                debug.append(label)
+
+            dist_length -= label_length
+        
+        print(debug, debug_length, len(debug))
+
+        input_parts = [item for chunk in input_parts for item in chunk] # flatten list
+        label_parts = [item for chunk in label_parts for item in chunk] # flatten list
+
+        # Reseed
+        random.seed(42)
+
+        return (np.array(input_parts), np.array(label_parts))
+
 
     elif args.randomize == 'full':
         """Full randomize"""

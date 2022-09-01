@@ -13,6 +13,7 @@ class AdaptiveLiteSense(AdaptivePolicy):
 
     def __init__(self,
                  collection_rate: float,
+                 dataset: str,
                  threshold: float,
                  num_seq: int,
                  seq_length: int,
@@ -20,11 +21,13 @@ class AdaptiveLiteSense(AdaptivePolicy):
                  max_skip: int,
                  min_skip: int,
                  collect_mode: CollectMode,
+                 model: str,
                  max_collected: Optional[int] = None,
                  max_window_size: int = 0,
-                 epsilon: int = 0.6
+                 epsilon: int = 0.6,
                  ):
         super().__init__(collection_rate=collection_rate,
+                         dataset=dataset,
                          threshold=threshold,
                          num_seq=num_seq,
                          seq_length=seq_length,
@@ -32,10 +35,11 @@ class AdaptiveLiteSense(AdaptivePolicy):
                          max_skip=max_skip,
                          min_skip=min_skip,
                          collect_mode=collect_mode,
+                         model=model,
                          max_collected=max_collected,
                          max_window_size=max_window_size)
         self._alpha = 0.7
-        self._beta = 0.1
+        self._beta = 0.7
 
         self._mean = np.zeros(shape=(num_features, ))  # [D]
         self._dev = np.zeros(shape=(num_features, ))

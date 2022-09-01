@@ -43,8 +43,6 @@ class AdaptivePhases(AdaptiveLiteSense):
                          max_window_size=max_window_size)
         # Policy parameters
         self._seq_length = seq_length
-        self._distribution = load_distribution('moving_dist.txt')
-        self._interp = np.interp(self._distribution, [min(self._distribution), max(self._distribution)], [0, 100])
         self._deviations = []
         self._means = []
 
@@ -104,12 +102,9 @@ class AdaptivePhases(AdaptiveLiteSense):
     def collect(self, measurement: np.ndarray):
         measurement = (measurement[0]**2 + measurement[1]**2 + measurement[2]**2)**0.5
 
-        # self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
-        # self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
         self.mean = (1.0 - self._alpha) * self.mean + self._alpha * measurement
         self.dev = (1.0 - self._beta) * self.dev + self._beta * np.abs(self.mean - measurement)
 
-        # self._deviations.append(sum(self._dev))
         self._deviations.append(self.dev)
         self._means.append(self.mean)
 
@@ -119,8 +114,6 @@ class AdaptivePhases(AdaptiveLiteSense):
         self._skip_idx = 0
 
     def reset_params(self, label):
-        # print("====================================LABEL CHANGE================================================")
-
         collection_rate = self._collection_rates[self._label_idx]
         self._label_idx += 1
 
