@@ -129,11 +129,11 @@ dmypy.json
 .pyre/
 
 # Custom
-datasets/
-raw_datasets/
-phone_accel/
-results/
-test/
-train/
-saved_models/
+gambler/datasets/
+gambler/raw_datasets/
+gambler/phone_accel/
+gambler/results/
+gambler/test/
+gambler/train/
+gambler/saved_models/
 thinking.md
