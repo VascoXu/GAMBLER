@@ -1,8 +1,14 @@
 import os
+from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 
+if __name__ == '__main__':
+    parser = ArgumentParser()
+    parser.add_argument('--filename', type=str, default='hi.txt')
+    args = parser.parse_args()
+
 dirname = os.path.dirname(__file__)
-dataset_file = 'hi.txt'
+dataset_file = args.filename
 data_file = os.path.join(dirname, '.', dataset_file)
 
 dist = []

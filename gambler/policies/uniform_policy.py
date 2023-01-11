@@ -18,15 +18,15 @@ class UniformPolicy(Policy):
                  seq_length: int,
                  num_features: int,
                  collect_mode: CollectMode,
-                 max_window_size: int = 0):
+                 window_size: int = 0):
         super().__init__(collection_rate=collection_rate,
                          num_seq=num_seq,
                          num_features=num_features,
                          seq_length=seq_length,
                          collect_mode=collect_mode,
                          )
-
-        self._max_window_size = max_window_size
+        self._dataset = dataset
+        self._window_size = window_size
 
         target_samples = int(collection_rate * seq_length)
 
@@ -38,7 +38,6 @@ class UniformPolicy(Policy):
         index = 0
         while index < seq_length:
             self._skip_indices.append(index)
-
             if (target_samples - len(self._skip_indices)) == (seq_length - index - 1):
                 index += 1
             else:
@@ -56,10 +55,10 @@ class UniformPolicy(Policy):
         return PolicyType.UNIFORM
 
     @property
-    def max_window_size(self) -> int:
-        return self._max_window_size
+    def window_size(self) -> int:
+        return self._window_size
 
-    def should_collect(self, seq_idx: int, seq_num: int) -> bool:
+    def should_collect(self, seq_idx: int, window: tuple) -> bool:
         if (self._skip_idx < len(self._skip_indices) and seq_idx == self._skip_indices[self._skip_idx]):
             self._skip_idx += 1
             return True
@@ -69,6 +68,3 @@ class UniformPolicy(Policy):
     def reset(self):
         super().reset()
         self._skip_idx = 0
-
-    def reset_params(self, label):
-        pass

@@ -1,6 +1,14 @@
+from re import S
 import numpy as np
+import pandas as pd
 import math
 import random
+import pickle
+import os
+
+from sklearn.linear_model import LinearRegression
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.model_selection import train_test_split
 
 from collections import deque, OrderedDict
 from enum import Enum, auto
@@ -12,12 +20,16 @@ from gambler.utils.constants import ALPHA, P
 from gambler.utils.controller import Controller
 from gambler.utils.action import Action
 from gambler.utils.distribution import load_distribution
+from gambler.utils.file_utils import read_pickle_gz, save_json_gz, save_pickle_gz, read_json_gz
+from gambler.utils.loading import load_data
+from gambler.utils.measurements import translate_measurement
 
 
 class AdaptiveBandit(AdaptiveLiteSense):
 
     def __init__(self,
                  collection_rate: float,
+                 dataset: str,
                  threshold: float,
                  num_seq: int,
                  seq_length: int,
@@ -25,11 +37,12 @@ class AdaptiveBandit(AdaptiveLiteSense):
                  max_skip: int,
                  min_skip: int,
                  collect_mode: CollectMode,
+                 model: str,
                  max_collected: Optional[int] = None,
-                 max_window_size: int = 0,
-                 epsilon: int = 0.2
+                 window_size: int = 0,
                  ):
         super().__init__(collection_rate=collection_rate,
+                         dataset=dataset,
                          threshold=threshold,
                          num_seq=num_seq,
                          seq_length=seq_length,
@@ -37,42 +50,44 @@ class AdaptiveBandit(AdaptiveLiteSense):
                          max_skip=max_skip,
                          min_skip=min_skip,
                          collect_mode=collect_mode,
+                         model=model,
                          max_collected=max_collected,
-                         max_window_size=max_window_size)
-        # Policy parameters
+                         window_size=window_size)
+        
+        # Default parameters
         self._seq_length = seq_length
-        self._distribution = load_distribution('moving_dist.txt')
-        self._interp = np.interp(self._distribution, [min(self._distribution), max(self._distribution)], [0, 100])
-        self._deviations = []
-        self._means = []
-        self._covs = []
+        self._dataset = dataset
+        self._window_size = window_size
+        self._window_idx = 0
 
-        self._max_cov = 0.18
-
+        # Policy parameters
+        self._moving_dev = 0
+        self._moving_mean = 0
+        self._dev_count = 0
+        self._mean_count = 0
         self.mean = 0
         self.dev = 0
+        self._window_dev = 0
 
-        # Epsilon-greedy parameters
-        self._epsilon = 1
-        self._sigma = 3
-        self._step_size = 0.2
-        self._decay = 0.9
-        self._offset = 30
-        self._initial = 10
+        # TODO
+        self._sigma = 0
+        self.K = 0.01
+        self.policy = 'adaptive'
 
-        # Bandit parameters
-        self._actions = []
-        for i in range(2, 10):
-            self._actions.append(Action(i*0.1))
-        self._j = len(self._actions) - 1
+        self._moving_rate = collection_rate
+        
+        # Budget parameters
+        self._samples_collected = 0
+        self._samples_seen = 0
+        self._total_samples = seq_length
+        self._total_time = self._total_samples
+        self._budget = self._total_samples*collection_rate
 
-        self._delta = 1/len(self._actions)
-
-        # Default parameters
-        self._collection_rate = 0.9
+        # Model parameters
+        self._collection_rate = collection_rate
 
         # Fit default uniform policy
-        target_samples = int(self._collection_rate * seq_length)
+        target_samples = int(collection_rate * window_size)
 
         skip = max(1.0 / self._collection_rate, 1)
         frac_part = skip - math.floor(skip)
@@ -95,135 +110,118 @@ class AdaptiveBandit(AdaptiveLiteSense):
         self._skip_indices = self._skip_indices[:target_samples]
         self._skip_idx = 0
 
-        self._window_size = 0
-        self._max_window_size = max_window_size
-
     @property
     def policy_type(self) -> PolicyType:
         return PolicyType.ADAPTIVE_BANDIT
-        
-    def should_collect(self, seq_idx: int, seq_num: int) -> bool:
-        if (self._skip_idx < len(self._skip_indices) and seq_idx == self._skip_indices[self._skip_idx]):
-            self._skip_idx += 1
-            return True
 
-        return False
+    def should_collect(self, seq_idx: int, window: tuple) -> bool:
+        self._window_idx += 1
+        self._samples_seen += 1
 
-    def update(self, collection_ratio: float, seq_idx: int):
-        # Check if budget was reached
-        if len(self._deviations) == 0:
-            return
+        if self.policy == 'uniform':
+            if (self._skip_idx < len(self._skip_indices) and (self._window_idx-1) == self._skip_indices[self._skip_idx]):
+                self._skip_idx += 1
 
-        _dev = sum(self._deviations)/len(self._deviations)
-        _mean = sum(self._means)/len(self._means)
-        cov = _dev/_mean
+                return True
 
-        # Calculate percentile of observed deviation
-        dev = np.interp(_dev, [min(self._distribution), max(self._distribution)], [0, 100])
-        percentile = np.percentile(self._interp, dev)
+            return False
 
-        # Update estimate mean reward
-        for i,action in enumerate(self._actions):
-            _cov = cov/self._max_cov
-            self._offset *= self._decay
-            reward = min(1/(abs(_cov-action.val)+self._offset), 50)
-            q_estimate = action.reward
-            q_a = q_estimate + self._step_size*(reward - q_estimate)
-            self._actions[i].reward = q_a
+        if self.policy == 'adaptive':
+            if (seq_idx == 0) or (self._sample_skip >= self._current_skip):
+                return True
 
-        # print(f'ACTION ({round(self._actions[self._j].val, 2)}):')
-        # print('====================================================')
-        # print(f'TD_error: {reward-q_estimate}')
-        # print(f'percentile: {percentile} | cov: {_cov}')
-        # print(f'prev estimate: {q_estimate}')
-        # print(f'received reward: {reward}')
-        # print(f'updted estimate: {self._actions[self._j].reward}')
+            self._sample_skip += 1
+            return False            
 
-        if self._initial < len(self._actions):
-            # Try all actions
-            collection_rate = self._actions[self._initial].val
-            self._j = self._initial
-            self._initial += 1
+    def update(self, collection_ratio: float, seq_idx: int, window: tuple):
+        # Pick policy
+        leftover = self._budget - self._samples_collected
+        budget_left = leftover / self._total_samples if self._total_samples > 0 else 0
+
+        # Update time
+        self._total_samples -= self._window_size
+        leftover = self._budget - self._samples_collected
+
+        time_left = self._total_samples
+        time_spent = (self._total_time - self._total_samples)
+
+        alpha = time_left / self._total_time
+        beta = time_spent / self._total_time
+
+        # Flip a coin
+        rand = self._rand.random()
+        if rand < alpha:
+            # Pick adaptive policy
+            self.policy = 'adaptive'
+            # print('adaptive')
         else:
-            # Epsilon-Greedy Approach
-            rand = self._rand.random()
-            if rand < self._epsilon: 
-                # explore
-                idx = random.choice(range(len(self._actions)))
-                collection_rate = round(self._actions[idx].val,2)
-                # print(f'EXPLORE: {round(collection_rate, 2)}')
-                self._j = idx
-            else: 
-                # exploit
-                self._j = np.argmax([action.reward for i,action in enumerate(self._actions)])
-                collection_rate = round(self._actions[self._j].val,2)
+            # Pick uniform weighted on average
+            self.policy = 'uniform'
+            # print('uniform')
 
-            # Update epsilon
-            TD_error = abs(reward - q_estimate)
-            top = (1-math.e**((-(self._step_size)*TD_error)/self._sigma))
-            bottom = (1+math.e**((-(self._step_size)*TD_error)/self._sigma))
+            # Determine collection rates
+            collection_rate = budget_left
+    
+            # Set collection rate to 1 when there is surplus in budget 
+            if budget_left >= 1:
+                collection_rate = 1.0
 
-            f = top / bottom 
-            self._epsilon = self._delta * f + (1-self._delta) * self._epsilon
+            # Fit default uniform policy
+            target_samples = int(collection_rate * self._window_size)
 
-        # Update collection rate
-        if (self._skip_idx < len(self._skip_indices) and self._collection_rate != collection_rate):
-            old_idx = self._skip_indices[self._skip_idx]
-            target_samples = int(collection_rate * self._seq_length)
-
-            skip = max(1.0 / collection_rate, 1)
+            skip = 1 if collection_rate == 0 else max(1.0 / collection_rate, 1)
             frac_part = skip - math.floor(skip)
 
             self._skip_indices: List[int] = []
 
             index = 0
-            while index < self._seq_length:
+            while index < self._window_size:
                 self._skip_indices.append(index)
-
-                if (target_samples - len(self._skip_indices)) == (self._seq_length - index - 1):
+    
+                if (target_samples - len(self._skip_indices)) == (self._window_size - index - 1):
                     index += 1
                 else:
-                    r = self._rand.uniform()
-                    if r > frac_part:
-                        index += int(math.floor(skip))
-                    else:
-                        index += int(math.ceil(skip))
+                    index += int(math.ceil(skip))
+                    # r = self._rand.uniform()
+                    # if r > frac_part:
+                    #     index += int(math.floor(skip))
+                    # else:
+                    #     index += int(math.ceil(skip))
 
+            
             self._skip_indices = self._skip_indices[:target_samples]
 
-            self._skip_idx = len(self._skip_indices)-1
-            for (i, val) in enumerate(self._skip_indices):
-                if val >= old_idx:
-                    self._skip_idx = i
-                    break
-            
-        # self._collection_rate = collection_rate
-        self._deviations = []
-        self._means = []
+        self._skip_idx = 0
+        self._window_idx = 0
+    
+        # Reset parameters
+        self._moving_dev = 0
+        self._dev_count = 0
+
 
     def collect(self, measurement: np.ndarray):
-        measurement = (measurement[0]**2 + measurement[1]**2 + measurement[2]**2)**0.5
-
-        # self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
-        # self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
         self.mean = (1.0 - self._alpha) * self.mean + self._alpha * measurement
         self.dev = (1.0 - self._beta) * self.dev + self._beta * np.abs(self.mean - measurement)
-        self._deviations.append(self.dev)
-        self._means.append(self.mean)
-        # self._means.append(measurement)
-        # self._means.append(measurement)
+
+        norm = np.sum(self.dev)
+
+        if norm > self._threshold:
+            self._current_skip = max(int(self._current_skip / 2), self.min_skip)
+        else:
+            self._current_skip = min(self._current_skip + 1, self.max_skip)
+
+        self._estimate = measurement
+        self._sample_skip = 0
+        
+        # Update policy parameters
+        self._moving_dev += self.dev
+        self._moving_mean += self.mean
+        self._dev_count += 1
+        self._mean_count += 1
+
+        self._samples_collected += 1
+
 
     def reset(self):
         super().reset()
         self._skip_idx = 0
-
-    def reset_params(self, label):
-        # print("====================================LABEL CHANGE================================================")
-        if len(self._covs) == 0:
-            return
-
-        # print(sum(sum(self._covs)/len(self._covs)))
-        self._covs = []
-        # for i in range(len(self._actions)):
-        #     pass
-        #     print(f'Action {round((i+2)*0.1, 2)}: {self._actions[i].reward}')

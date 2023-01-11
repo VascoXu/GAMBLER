@@ -72,5 +72,5 @@ class Policy:
     def policy_type(self) -> PolicyType:
         raise NotImplementedError()
 
-    def should_collect(self, seq_idx: int, seq_num: int) -> bool:
+    def should_collect(self, seq_idx: int, window: tuple) -> bool:
         raise NotImplementedError()

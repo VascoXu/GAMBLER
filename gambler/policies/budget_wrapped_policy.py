@@ -3,24 +3,19 @@ import numpy as np
 import os.path
 from collections import deque, OrderedDict
 from typing import Tuple, List, Dict, Any, Optional
-from gambler.policies.adaptive_phases import AdaptivePhases
+from gambler.policies.adaptive_budget import AdaptiveBudget
 
 from gambler.utils.file_utils import read_json, read_pickle_gz, read_json_gz
 from gambler.utils.data_types import PolicyType, PolicyResult, CollectMode
 from gambler.policies.policy import Policy
-from gambler.policies.adaptive_controller import AdaptiveController
 from gambler.policies.adaptive_deviation import AdaptiveDeviation
 from gambler.policies.adaptive_litesense import AdaptiveLiteSense
-from gambler.policies.adaptive_bandit import AdaptiveBandit
-from gambler.policies.adaptive_phases import AdaptivePhases
-from gambler.policies.adaptive_training import AdaptiveTraining
+from gambler.policies.adaptive_gambler import AdaptiveGambler
 from gambler.policies.adaptive_train import AdaptiveTrain
-from gambler.policies.bandit_budget import BanditBudget
-from gambler.policies.adaptive_sigma import AdaptiveSigma
-from gambler.policies.sigma_budget import SigmaBudget
-from gambler.policies.adaptive_greedy import AdaptiveGreedy
 from gambler.policies.adaptive_heuristic import AdaptiveHeuristic
 from gambler.policies.adaptive_uniform import AdaptiveUniform
+from gambler.policies.adaptive_budget import AdaptiveBudget
+from gambler.policies.adaptive_bandit import AdaptiveBandit
 from gambler.policies.uniform_policy import UniformPolicy
 
 
@@ -58,27 +53,23 @@ class BudgetWrappedPolicy(Policy):
         self._consumed_energy = 0.0
         self._num_collected = 0
         self._total_samples = 0
-        self._budget = seq_length*num_seq*collection_rate
+        self._budget = seq_length*collection_rate
 
         # Get the data distributions for possible random sequence generation
-        dirname = os.path.dirname(__file__)
-        distribution_path = os.path.join(dirname, '../datasets', dataset, 'distribution.json')
-        distribution = read_json(distribution_path)
+        # dirname = os.path.dirname(__file__)
+        # distribution_path = os.path.join(dirname, '../datasets', dataset, 'distribution.json')
+        # distribution = read_json(distribution_path)
 
-        self._data_mean = np.array(distribution['mean'])
-        self._data_std = np.array(distribution['std'])
+        # self._data_mean = np.array(distribution['mean'])
+        # self._data_std = np.array(distribution['std'])
 
     @property
     def policy_type(self) -> PolicyType:
         return self._policy.policy_type
 
     @property
-    def force_update(self) -> bool:
-        return self._policy.force_update
-
-    @property
-    def max_window_size(self) -> int:
-        return self._policy.max_window_size
+    def window_size(self) -> int:
+        return self._policy.window_size
 
     @property
     def budget(self) -> float:
@@ -92,25 +83,18 @@ class BudgetWrappedPolicy(Policy):
     def training(self):
         return self._policy.training if self._policy.policy_type ==  PolicyType.ADAPTIVE_TRAIN else []
 
-    def set_budget(self, budget: float):
-        self._policy.set_budget(budget)
-        self._policy.set_update(True)
-
     def set_threshold(self, threshold: float):
         self._policy.set_threshold(threshold)
 
-    def set_update(self, update: float):
-        self._policy.set_update(update)
-
-    def update(self, collection_ratio: float, seq_idx: int):
-        self._policy.update(collection_ratio, seq_idx)
+    def update(self, collection_ratio: float, seq_idx: int, window: tuple):
+        self._policy.update(collection_ratio, seq_idx, window)
         
     def should_update(self):
         return self._policy.should_update()
 
-    def should_collect(self, seq_idx: int, seq_num: int) -> bool:
+    def should_collect(self, seq_idx: int, window: tuple) -> bool:
         self._total_samples += 1
-        return self._policy.should_collect(seq_idx=seq_idx, seq_num=seq_num)
+        return self._policy.should_collect(seq_idx=seq_idx, window=window)
 
     def has_exhausted_budget(self) -> bool:
         return self._num_collected >= self._budget
@@ -122,11 +106,9 @@ class BudgetWrappedPolicy(Policy):
     def reset(self):
         self._policy.reset()
 
-    def reset_params(self, label):
-        self._policy.reset_params(label)
-
     def init_for_experiment(self, num_sequences: int):
         self._num_sequences = num_sequences
+        self._num_collected = 0
 
     def get_random_sequence(self) -> np.ndarray:
         rand_list: List[np.ndarray] = []
@@ -170,14 +152,13 @@ def make_policy(name: str,
                              num_features=num_features,
                              seq_length=seq_length,
                              collect_mode=CollectMode[collect_mode.upper()],
-                             max_window_size=kwargs['max_window_size'])
+                             window_size=kwargs['window_size'])
     elif name.startswith('adaptive'):
         # Look up the threshold path
-        # threshold_path = os.path.join(base, '../saved_models', dataset, 'thresholds_block.json.gz')
-        threshold_path = kwargs['thresh'] if kwargs['thresh'] != '' else os.path.join(base, '../saved_models', dataset, 'thresholds_stream.json.gz')
+        threshold_path = os.path.join(base, '../saved_models', dataset, 'thresholds_stream.json.gz')
 
         temp_name = name
-        if name == 'adaptive_train' or name == 'adaptive_uniform':
+        if name == 'adaptive_train' or name == 'adaptive_uniform' or name =='adaptive_elitesense' or name == 'adaptive_budget' or name =='adaptive_bandit':
             name = 'adaptive_deviation'
 
         did_find_threshold = False
@@ -223,7 +204,7 @@ def make_policy(name: str,
             min_skip = 0
 
         # Set the window size
-        max_window_size = kwargs['max_window_size'] if 'max_window_size' in kwargs else 0
+        window_size = kwargs['window_size'] if 'window_size' in kwargs else 0
 
         # Reset name
         name = temp_name
@@ -239,24 +220,14 @@ def make_policy(name: str,
             cls = AdaptiveLiteSense
         elif name == 'adaptive_deviation':
             cls = AdaptiveDeviation
-        elif name == 'adaptive_controller':
-            cls = AdaptiveController
-        elif name == 'adaptive_greedy':
-            cls = AdaptiveGreedy
         elif name == 'adaptive_uniform':
             cls = AdaptiveUniform
+        elif name =='adaptive_budget':
+            cls = AdaptiveBudget
+        elif name == 'adaptive_gambler':
+            cls = AdaptiveGambler
         elif name == 'adaptive_bandit':
             cls = AdaptiveBandit
-        elif name == 'adaptive_sigma':
-            cls = AdaptiveSigma
-        elif name == 'adaptive_budget':
-            cls = BanditBudget
-        elif name == 'adaptive_budget_sigma':
-            cls = SigmaBudget
-        elif name == 'adaptive_phases':
-            cls = AdaptivePhases
-        elif name == 'adaptive_training':
-            cls = AdaptiveTraining
         elif name == 'adaptive_train':
             cls = AdaptiveTrain
         else:
@@ -273,7 +244,7 @@ def make_policy(name: str,
                    collect_mode=CollectMode[collect_mode.upper()],
                    model=kwargs['model'],
                    max_collected=max_collected,
-                   max_window_size=max_window_size,
+                   window_size=window_size,
                    )
     else:
         raise ValueError('Unknown policy with name: {0}'.format(name))

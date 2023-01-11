@@ -1,0 +1,9 @@
+python3 analysis/plot_expected_errors.py --dataset epilepsy --window-size 20 --should-enforce-budget --num-runs 1 > epilepsy_exp.txt &
+python3 analysis/plot_expected_errors.py --dataset uci_har --window-size 20 --should-enforce-budget --num-runs 1 > uci_har_exp.txt &
+python3 analysis/plot_expected_errors.py --dataset wisdm --window-size 20 --should-enforce-budget --num-runs 1 > wisdm_exp.txt &
+python3 analysis/plot_expected_errors.py --dataset trajectories --window-size 20 --should-enforce-budget --num-runs 1 > trajectories_exp.txt &
+python3 analysis/plot_expected_errors.py --dataset pedestrian --window-size 20 --should-enforce-budget --num-runs 1 > pedestrian_exp.txt &
+python3 analysis/plot_expected_errors.py --dataset temperature --window-size 20 --should-enforce-budget --num-runs 1 > temperature_exp.txt &
+python3 analysis/plot_expected_errors.py --dataset pavement --window-size 20 --should-enforce-budget --num-runs 1 > pavement_exp.txt &
+python3 analysis/plot_expected_errors.py --dataset haptics --window-size 15 --should-enforce-budget --num-runs 1 > haptics_exp.txt &
+python3 analysis/plot_expected_errors.py --dataset eog --window-size 20 --should-enforce-budget --num-runs 1 > eog_exp.txt &

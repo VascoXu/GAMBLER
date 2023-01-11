@@ -1,14 +1,14 @@
-
-
-
 #!/bin/python3
 
+from importlib.metadata import distribution
 import os.path
 import numpy as np
 import time
 from collections import defaultdict, namedtuple
 from argparse import ArgumentParser
 from typing import List
+from collections import Counter
+from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
 
 from gambler.utils.data_utils import reconstruct_sequence
 from gambler.policies.policy_utils import run_policy
@@ -20,7 +20,7 @@ from gambler.utils.file_utils import iterate_dir, read_json, save_json_gz, read_
 
 BatchResult = namedtuple('BatchResult', ['mae', 'did_exhaust'])
 VAL_BATCH_SIZE = 512
-MAX_ITER = 100  # Prevents any unexpected infinite looping
+MAX_ITER = 300  # Prevents any unexpected infinite looping
 
 MAX_MARGIN_FACTOR = 0.03  # Limit the padding to 3% of the overall budget (~300 mJ)
 VAL_MARGIN_FACTOR = 0.9
@@ -32,7 +32,7 @@ TOLERANCE = 1e-4
 
 
 def execute_on_batch(policy: BudgetWrappedPolicy, batch: np.ndarray, energy_margin: float) -> BatchResult:
-    policy.init_for_experiment(num_sequences=batch.shape[0])
+    policy.init_for_experiment(num_sequences=batch.shape[0]*batch.shape[1])
 
     # Reduce the budget by the given margin factor
     margin = policy._budget * energy_margin
@@ -41,30 +41,51 @@ def execute_on_batch(policy: BudgetWrappedPolicy, batch: np.ndarray, energy_marg
     # Execute the policy on each sequence
     estimated_list: List[np.ndarray] = []
 
-    num_collected = 0
-    total = 0
+    # Merge sequences into continous stream
+    inputs = batch.reshape(-1, batch.shape[-1])
 
+    policy.reset()
+    policy_result = run_policy(policy=policy, sequence=inputs, should_enforce_budget=True)
+
+    # Reconstruct the sequence elements, [T, D]
+    if len(policy_result.measurements) > 0:
+        collected = np.vstack(policy_result.measurements) # [K, D]
+        reconstructed = reconstruct_sequence(measurements=collected,
+                                            collected_indices=policy_result.collected_indices,
+                                            seq_length=inputs.shape[0])            
+    else:
+        reconstructed = np.zeros([policy.window_size, num_features])
+
+    estimated_list.append(np.expand_dims(reconstructed, axis=0))
+
+    num_collected = policy_result.num_collected
+    total = len(inputs)
+
+    """
     for seq_idx, sequence in enumerate(batch):
         policy.reset()
-        policy_result = run_policy(policy=policy, sequence=sequence, window=(0,0), seq_num=seq_idx, should_enforce_budget=True)
+        policy_result = run_policy(policy=policy, sequence=sequence, should_enforce_budget=True)
 
         # Reconstruct the sequence elements, [T, D]
-        if policy_result.num_collected == 0:
-            reconstructed = np.zeros(sequence.shape)
-        else:
-            reconstructed = reconstruct_sequence(measurements=policy_result.measurements,
+        if len(policy_result.measurements) > 0:
+            collected = np.vstack(policy_result.measurements) # [K, D]
+            reconstructed = reconstruct_sequence(measurements=collected,
                                                 collected_indices=policy_result.collected_indices,
-                                                seq_length=seq_length)
+                                                seq_length=seq_length)            
+        else:
+            reconstructed = np.zeros([policy.window_size, num_features])
 
         estimated_list.append(np.expand_dims(reconstructed, axis=0))
 
         num_collected += policy_result.num_collected
         total += len(sequence)
+    """
 
     estimated = np.vstack(estimated_list)  # [B, T, D]
 
     # Compute the error over the batch
-    error = np.average(np.abs(batch - estimated))
+    error = mean_absolute_error(y_true=inputs, y_pred=reconstructed)
+    # error = np.average(np.abs(batch - estimated))
 
     return BatchResult(mae=error,
                        did_exhaust=policy.has_exhausted_budget())
@@ -77,26 +98,33 @@ def fit(policy: BudgetWrappedPolicy,
         upper: float,
         batches_per_trial: int,
         energy_margin: float,
-        should_print: bool) -> float:
+        should_print: bool):
     assert batches_per_trial >= 1, 'The # of Batches per Trial must be positive'
 
-    seq_length = inputs.shape[1]
+    # Merge sequences into continous stream
+    inputs = inputs.reshape(-1, inputs.shape[-1])
+
+    # Create the sample indices for batch creation
     sample_idx = np.arange(inputs.shape[0])
 
     rand = np.random.RandomState(seed=581)
-
-    observed = BIG_NUMBER
 
     current = (lower + upper) / 2
     best_threshold = upper
     best_error = BIG_NUMBER
 
     batch_size = min(len(sample_idx), batch_size)
+    batch_size = len(sample_idx)
+    
+    # len(sample_idx)
+    # print("batch_size: ", batch_size)
 
     # No need to run multiple batches when we are already
     # using the full data-set
     if batch_size == len(sample_idx):
         batches_per_trial = 1
+
+    batches_per_trial = 1
 
     iter_count = 0
     while (iter_count < MAX_ITER) and (abs(upper - lower) > TOLERANCE):
@@ -115,6 +143,7 @@ def fit(policy: BudgetWrappedPolicy,
             # Make the batch
             batch_idx = rand.choice(sample_idx, size=batch_size, replace=False)
             batch = inputs[batch_idx]
+            batch = inputs
 
             batch_result = execute_on_batch(policy=policy, batch=batch, energy_margin=energy_margin)
 
@@ -134,6 +163,9 @@ def fit(policy: BudgetWrappedPolicy,
             print('Best Error: {0:.7f}, Best Threshold: {1:.7f}'.format(best_error, best_threshold), end='\r')
 
         # Get the search direction based on the budget use
+        # budget = policy.budget
+        # consumed_energy = policy.consumed_energy
+
         if did_exhaust:
             lower = current  # Reduce the energy consumption
         else:
@@ -148,7 +180,7 @@ def fit(policy: BudgetWrappedPolicy,
     if should_print:
         print()
 
-    return best_threshold
+    return (best_threshold, best_error)
 
 
 def validate_thresholds(policy: BudgetWrappedPolicy,
@@ -163,8 +195,11 @@ def validate_thresholds(policy: BudgetWrappedPolicy,
     # Set the threshold
     policy._threshold = threshold
 
+    # Merge sequences into continous stream
+    inputs = inputs.reshape(-1, inputs.shape[-1])
+
     # Create the sample indices for batch creation
-    sample_idx = np.arange(len(inputs))
+    sample_idx = np.arange(inputs.shape[0])
 
     # Reduce the energy margin to account for some variance
     energy_margin *= VAL_MARGIN_FACTOR
@@ -174,6 +209,9 @@ def validate_thresholds(policy: BudgetWrappedPolicy,
     if len(inputs) <= VAL_BATCH_SIZE:
         batch_size = len(inputs)
         num_batches = 1
+
+    num_batches = 1
+    batch_size = len(inputs)
 
     results: List[BatchResult] = []
     for _ in range(num_batches):
@@ -195,6 +233,7 @@ if __name__ == '__main__':
     parser.add_argument('--policy', type=str, required=True, choices=['adaptive_heuristic', 'adaptive_deviation'])
     parser.add_argument('--collection-rates', type=float, nargs='+', required=True)
     parser.add_argument('--collect', type=str, required=True, choices=['tiny', 'low', 'med', 'high'])
+    parser.add_argument('--encryption', type=str, required=True, choices=['stream', 'block'])
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--batches-per-trial', type=int, default=3)
     parser.add_argument('--should-print', action='store_true')
@@ -204,8 +243,8 @@ if __name__ == '__main__':
     # validation on the "training" set. Fitting the thresholds on the training
     # set can cause overfitting because some policies (e.g. Skip RNNs) fit their policy
     # to the training set.
-    inputs, _ = load_data(args.dataset, fold='validation', dist='')
-    val_inputs, _ = load_data(args.dataset, fold='train', dist='')
+    inputs, _ = load_data(args.dataset, fold='train', dist='')
+    val_inputs, labels = load_data(args.dataset, fold='validation', dist='')
 
     # Unpack the data dimensions
     num_seq, seq_length, num_features = inputs.shape
@@ -214,7 +253,8 @@ if __name__ == '__main__':
     max_threshold = np.max(np.sum(np.abs(inputs), axis=-1)) + 1000.0
 
     # Load the parameter files
-    output_file = os.path.join('saved_models', args.dataset, 'thresholds_{0}.json.gz'.format('test'))
+    encryption = args.encryption
+    output_file = os.path.join('saved_models', args.dataset, 'thresholds_{0}.json.gz'.format(encryption))
     threshold_map = read_json_gz(output_file) if os.path.exists(output_file) else dict()
 
     policy_name = args.policy
@@ -240,21 +280,27 @@ if __name__ == '__main__':
             print('Starting {0}'.format(collection_rate))
 
         # Create the policy for which to fit thresholds
-        policy = BudgetWrappedPolicy(name=policy_name,
-                                     collection_rate=collection_rate,
-                                     seq_length=seq_length,
-                                     num_seq=num_seq,
-                                     num_features=num_features,
-                                     collect_mode=collect_mode,
-                                     dataset=args.dataset)
+        policy = BudgetWrappedPolicy(name=args.policy,
+                                    num_seq=num_seq,
+                                    seq_length=seq_length*num_seq,
+                                    num_features=num_features,
+                                    dataset=args.dataset,
+                                    collection_rate=collection_rate,
+                                    collect_mode='tiny',
+                                    window_size=20,
+                                    model='',
+                                    max_skip=0)
 
         final_threshold = None
         energy_margin = MARGIN_FACTOR
         did_exhaust = True
 
+        best_error = 10000
+        best_threshold = 10000
+
         while (did_exhaust) and (energy_margin < MAX_MARGIN_FACTOR):
             # Fit the policy using the given rate and energy margin
-            threshold = fit(policy=policy,
+            threshold, error = fit(policy=policy,
                             inputs=inputs,
                             batch_size=args.batch_size,
                             lower=lower,
@@ -272,6 +318,11 @@ if __name__ == '__main__':
                                               rand=rand)
 
             did_exhaust = any(r.did_exhaust for r in val_results)
+
+            if error < best_error:
+                best_threshold = threshold
+                best_error = error
+
             final_threshold = threshold
 
             # Reset the bounds to speed up the next iteration
@@ -280,10 +331,13 @@ if __name__ == '__main__':
 
             energy_margin += MARGIN_FACTOR
 
-        threshold_map[policy_name][collect_mode][str(round(collection_rate, 2))] = final_threshold
+        # threshold_map[policy_name][collect_mode][str(round(collection_rate, 2))] = final_threshold
+        threshold_map[policy_name][collect_mode][str(round(collection_rate, 2))] = best_threshold
 
         if args.should_print:
             print('==========')
+
+    print(threshold_map)
 
     # Save the results
     save_json_gz(threshold_map, output_file)

@@ -23,8 +23,7 @@ class AdaptiveLiteSense(AdaptivePolicy):
                  collect_mode: CollectMode,
                  model: str,
                  max_collected: Optional[int] = None,
-                 max_window_size: int = 0,
-                 epsilon: int = 0.6,
+                 window_size: int = 0,
                  ):
         super().__init__(collection_rate=collection_rate,
                          dataset=dataset,
@@ -37,18 +36,19 @@ class AdaptiveLiteSense(AdaptivePolicy):
                          collect_mode=collect_mode,
                          model=model,
                          max_collected=max_collected,
-                         max_window_size=max_window_size)
+                         window_size=window_size)
         self._alpha = 0.7
         self._beta = 0.7
 
         self._mean = np.zeros(shape=(num_features, ))  # [D]
         self._dev = np.zeros(shape=(num_features, ))
 
+
     @property
     def policy_type(self) -> PolicyType:
         return PolicyType.ADAPTIVE_LITESENSE
 
-    def should_collect(self, seq_idx: int, seq_num: int) -> bool:
+    def should_collect(self, seq_idx: int, window: tuple) -> bool:
         if (seq_idx == 0) or (self._sample_skip >= self._current_skip):
             return True
 
@@ -75,11 +75,9 @@ class AdaptiveLiteSense(AdaptivePolicy):
         self._dev = updated_dev
 
         self._sample_skip = 0
+        
 
     def reset(self):
         super().reset()
         self._mean = np.zeros(shape=(self.num_features, ))  # [D]
         self._dev = np.zeros(shape=(self.num_features, ))  # [D]
-
-    def reset_params(self, label):
-        pass

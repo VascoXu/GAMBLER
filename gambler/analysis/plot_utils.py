@@ -11,7 +11,7 @@ TITLE_FONT = 16
 PLOT_SIZE = (8, 6)
 
 # https://stackoverflow.com/questions/14270391/python-matplotlib-multiple-bars
-def bar_plot(ax, data, colors=None, total_width=0.8, single_width=1, legend=''):
+def bar_plot(ax, data, colors=None, total_width=0.8, single_width=1.0, legend=[]):
     """Draws a bar plot with multiple bars per data point.
 
     Parameters
@@ -80,4 +80,4 @@ def bar_plot(ax, data, colors=None, total_width=0.8, single_width=1, legend=''):
     # Draw values on top of bar
     for bar in all_bars:
         y = bar.get_height()
-        plt.text(bar.get_x(), y + 0.01, str(round(float(y), 3)), fontsize=8)
+        plt.text(bar.get_x(), y + 0.001, str(round(float(y), 3)), fontsize=8)

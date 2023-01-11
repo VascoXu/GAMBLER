@@ -22,8 +22,7 @@ class AdaptivePolicy(Policy):
                  collect_mode: CollectMode,
                  model: str,
                  max_collected: Optional[int] = None,
-                 max_window_size: int = 0,
-                 epsilon:int = 0.6):
+                 window_size: int = 0):
         super().__init__(collection_rate=collection_rate,
                          num_seq=num_seq,
                          num_features=num_features,
@@ -39,13 +38,11 @@ class AdaptivePolicy(Policy):
         self._current_skip = 0
         self._sample_skip = 0
 
-        self._force_update = False
-
         self._threshold = threshold
         self._collection_rate = collection_rate
 
         self._max_collected = max_collected
-        self._max_window_size = max_window_size
+        self._window_size = window_size
 
     @property
     def max_skip(self) -> int:
@@ -56,30 +53,18 @@ class AdaptivePolicy(Policy):
         return self._min_skip
 
     @property
-    def force_update(self) -> bool:
-        return self._force_update
-
-    @property
-    def max_window_size(self) -> int:
-        return self._max_window_size
+    def window_size(self) -> int:
+        return self._window_size
 
     @property
     def threshold(self) -> float:
         return self._threshold
         
-    def set_budget(self, budget: float):
-        self._collection_rate = budget
-        
-    def set_update(self, update: bool):
-        self._force_update = update
-
     def set_threshold(self, threshold: float):
         self._threshold = threshold
 
     def reset(self):
         super().reset()
+
         self._current_skip = 0
         self._sample_skip = 0
-
-    def reset_params(self, label):
-        pass 

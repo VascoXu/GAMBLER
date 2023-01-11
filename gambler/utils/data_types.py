@@ -5,16 +5,12 @@ from collections import namedtuple
 class PolicyType(Enum):
     ADAPTIVE_HEURISTIC = auto()
     ADAPTIVE_LITESENSE = auto()
+    ADAPTIVE_ELITESENSE = auto()
     ADAPTIVE_DEVIATION = auto()
-    ADAPTIVE_CONTROLLER = auto()
-    ADAPTIVE_GREEDY = auto()
+    ADAPTIVE_BUDGET = auto()
     ADAPTIVE_UNIFORM = auto()
     ADAPTIVE_BANDIT = auto()
-    ADAPTIVE_SIGMA = auto()
-    BANDIT_BUDGET = auto()
-    SIGMA_BUDGET = auto()
-    ADAPTIVE_PHASES = auto()
-    ADAPTIVE_TRAINING = auto()
+    ADAPTIVE_GAMBLER = auto()
     ADAPTIVE_TRAIN = auto()
     UNIFORM = auto()
     RANDOM = auto()
@@ -27,4 +23,4 @@ class CollectMode(Enum):
     HIGH = auto()
 
 
-PolicyResult = namedtuple('PolicyResult', ['measurements', 'collected_indices', 'collection_ratios', 'num_collected', 'collected_within_window', 'curr_window_size', 'training_data'])
+PolicyResult = namedtuple('PolicyResult', ['measurements', 'collected_indices', 'collection_ratios', 'num_collected', 'training_data'])

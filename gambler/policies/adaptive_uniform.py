@@ -23,9 +23,7 @@ class AdaptiveUniform(AdaptiveLiteSense):
                  collect_mode: CollectMode,
                  model: str,
                  max_collected: Optional[int] = None,
-                 max_window_size: int = 0,
-                 epsilon: int = 0.99
-                 ):
+                 window_size: int = 0):
         super().__init__(collection_rate=collection_rate,
                          dataset=dataset,
                          threshold=threshold,
@@ -37,35 +35,38 @@ class AdaptiveUniform(AdaptiveLiteSense):
                          model=model,
                          collect_mode=collect_mode,
                          max_collected=max_collected,
-                         max_window_size=max_window_size)
-        
-        self._budget = (seq_length*num_seq)*collection_rate
-        self._total_samples = seq_length*num_seq
-        self._total_time = self._total_samples
-        self._sample_count = 0
-        self._total_seen = 0
+                         window_size=window_size)
+        # Default parameters
         self._num_seq = num_seq
         self._seq_length = seq_length
-        # self._budget_cutoff = self._budget * 0.8
-        self._budget_cutoff = self._total_samples * 0.7
-        self._window_size = 0
-        self._max_window_size = max_window_size
-        self._skip_indices: List[int] = []
+        self._window_idx = 0
 
+        # Policy parameters
+        self._budget = seq_length*collection_rate
+        self._total_samples = seq_length
+        self._total_time = self._total_samples
+        self._budget_cutoff = self._budget * 0.5
+        self._samples_collected = 0
+        self._samples_seen = 0
+        self._skip_indices: List[int] = []
         self._adaptive = True
 
     @property
     def policy_type(self) -> PolicyType:
         return PolicyType.ADAPTIVE_UNIFORM
-        
-    def should_collect(self, seq_idx: int, seq_num: int) -> bool:
-        self._total_seen += 1
-        if self._total_seen >= self._budget_cutoff and self._adaptive and seq_idx == 0:
-            leftover = self._budget - self._sample_count
-            target_samples = int(leftover/(self._num_seq-seq_num))
-            leftover_rate = target_samples / self._seq_length
 
-            skip = max(1.0 / leftover_rate, 1)
+        
+    def should_collect(self, seq_idx: int, window: tuple) -> bool:
+        (window_idx, window_num) = window
+        self._samples_seen += 1
+
+        if self._samples_seen >= self._budget_cutoff and self._adaptive and window_idx == 0:
+            samples_left = self._budget - self._samples_collected
+            windows_left = math.ceil(self._seq_length/self._window_size) - window_num 
+            target_samples = math.floor(samples_left/windows_left)
+            leftover_rate = target_samples / self._window_size
+
+            skip = 1 if leftover_rate == 0 else max(1.0 / leftover_rate, 1) # TODO: check for correctness
             frac_part = skip - math.floor(skip)
 
             index = 0
@@ -87,20 +88,23 @@ class AdaptiveUniform(AdaptiveLiteSense):
             self._adaptive = False
 
         if self._adaptive:
-            # Run Adaptive Policy
+            # Execute Adaptive Policy
             if (seq_idx == 0) or (self._sample_skip >= self._current_skip):
                 return True
 
             self._sample_skip += 1
             return False
         else:
-            # Run Uniform Policy
-            if (self._skip_idx < len(self._skip_indices) and seq_idx == self._skip_indices[self._skip_idx]):
+            # Execute Uniform Policy
+            if (self._skip_idx < len(self._skip_indices) and self._window_idx == self._skip_indices[self._skip_idx]):
                 self._skip_idx += 1
+                self._window_idx += 1
                 return True
 
+            self._window_idx += 1
+
             return False
-    
+
 
     def collect(self, measurement: np.ndarray):
         self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
@@ -116,12 +120,15 @@ class AdaptiveUniform(AdaptiveLiteSense):
         self._estimate = measurement
         self._sample_skip = 0
 
-        self._sample_count += 1
+        self._samples_collected += 1
+
+
+    def update(self, collection_ratio: float, seq_idx: int, window: tuple):
+        if not self._adaptive:
+            self._window_idx = 0
+            self._skip_idx = 0
 
 
     def reset(self):
         super().reset()
         self._skip_idx = 0
-
-    def reset_params(self, label):
-        pass    
