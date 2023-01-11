@@ -1,10 +1,11 @@
 #!/bin/python3
 
 from importlib.metadata import distribution
+import random
 import os.path
 import numpy as np
 import time
-from collections import defaultdict, namedtuple
+from collections import defaultdict, namedtuple, Counter
 from argparse import ArgumentParser
 from typing import List
 from collections import Counter
@@ -16,6 +17,8 @@ from gambler.policies.budget_wrapped_policy import BudgetWrappedPolicy
 from gambler.utils.constants import SMALL_NUMBER, BIG_NUMBER
 from gambler.utils.loading import load_data
 from gambler.utils.file_utils import iterate_dir, read_json, save_json_gz, read_json_gz
+from gambler.utils.misc_utils import flatten
+from gambler.utils.data_manager import get_data
 
 
 BatchResult = namedtuple('BatchResult', ['mae', 'did_exhaust'])
@@ -51,7 +54,7 @@ def execute_on_batch(policy: BudgetWrappedPolicy, batch: np.ndarray, energy_marg
     if len(policy_result.measurements) > 0:
         collected = np.vstack(policy_result.measurements) # [K, D]
         reconstructed = reconstruct_sequence(measurements=collected,
-                                            collected_indices=policy_result.collected_indices,
+                                            collected_indices=flatten(policy_result.collected_indices),
                                             seq_length=inputs.shape[0])            
     else:
         reconstructed = np.zeros([policy.window_size, num_features])
@@ -116,9 +119,6 @@ def fit(policy: BudgetWrappedPolicy,
     batch_size = min(len(sample_idx), batch_size)
     batch_size = len(sample_idx)
     
-    # len(sample_idx)
-    # print("batch_size: ", batch_size)
-
     # No need to run multiple batches when we are already
     # using the full data-set
     if batch_size == len(sample_idx):
@@ -163,9 +163,6 @@ def fit(policy: BudgetWrappedPolicy,
             print('Best Error: {0:.7f}, Best Threshold: {1:.7f}'.format(best_error, best_threshold), end='\r')
 
         # Get the search direction based on the budget use
-        # budget = policy.budget
-        # consumed_energy = policy.consumed_energy
-
         if did_exhaust:
             lower = current  # Reduce the energy consumption
         else:
@@ -231,20 +228,23 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--dataset', type=str, required=True)
     parser.add_argument('--policy', type=str, required=True, choices=['adaptive_heuristic', 'adaptive_deviation'])
-    parser.add_argument('--collection-rates', type=float, nargs='+', required=True)
+    parser.add_argument('--collection-rates', type=float, nargs='+')
     parser.add_argument('--collect', type=str, required=True, choices=['tiny', 'low', 'med', 'high'])
-    parser.add_argument('--encryption', type=str, required=True, choices=['stream', 'block'])
+    parser.add_argument('--encryption', type=str, default='stream')
     parser.add_argument('--batch-size', type=int, default=256)
     parser.add_argument('--batches-per-trial', type=int, default=3)
     parser.add_argument('--should-print', action='store_true')
     args = parser.parse_args()
 
+    # Seed for reproducible results
+    random.seed(42)
+
     # Load the data. We fit thresholds on the "validation" set and
     # validation on the "training" set. Fitting the thresholds on the training
     # set can cause overfitting because some policies (e.g. Skip RNNs) fit their policy
     # to the training set.
-    inputs, _ = load_data(args.dataset, fold='train', dist='')
-    val_inputs, labels = load_data(args.dataset, fold='validation', dist='')
+    inputs, labels = load_data(args.dataset, fold='train')
+    val_inputs, val_labels = load_data(args.dataset, fold='validation')
 
     # Unpack the data dimensions
     num_seq, seq_length, num_features = inputs.shape
@@ -270,8 +270,12 @@ if __name__ == '__main__':
     val_indices = np.arange(val_inputs.shape[0])
     rand = np.random.RandomState(seed=3485)
 
-    for collection_rate in args.collection_rates:
+    if len(args.collection_rates) < 0:
+        collection_rates = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+    else:
+        collection_rates = args.collection_rates
 
+    for collection_rate in collection_rates:
         # Set the lower threshold based on the model type
         lower = -1 * max_threshold
         upper = max_threshold
@@ -298,46 +302,49 @@ if __name__ == '__main__':
         best_error = 10000
         best_threshold = 10000
 
-        while (did_exhaust) and (energy_margin < MAX_MARGIN_FACTOR):
-            # Fit the policy using the given rate and energy margin
-            threshold, error = fit(policy=policy,
-                            inputs=inputs,
-                            batch_size=args.batch_size,
-                            lower=lower,
-                            upper=upper,
-                            batches_per_trial=args.batches_per_trial,
-                            energy_margin=energy_margin,
-                            should_print=args.should_print)
+        # while (did_exhaust) and (energy_margin < MAX_MARGIN_FACTOR):
+        # Fit the policy using the given rate and energy margin
+        threshold, error = fit(policy=policy,
+                        inputs=inputs,
+                        batch_size=args.batch_size,
+                        lower=lower,
+                        upper=upper,
+                        batches_per_trial=args.batches_per_trial,
+                        energy_margin=energy_margin,
+                        should_print=args.should_print)
 
-            # Run on the validation set
-            val_results = validate_thresholds(policy=policy,
-                                              threshold=threshold,
-                                              inputs=val_inputs,
-                                              energy_margin=energy_margin,
-                                              num_batches=args.batches_per_trial,
-                                              rand=rand)
+        # Run on the validation set
+        val_results = validate_thresholds(policy=policy,
+                                            threshold=threshold,
+                                            inputs=val_inputs,
+                                            energy_margin=energy_margin,
+                                            num_batches=args.batches_per_trial,
+                                            rand=rand)
 
-            did_exhaust = any(r.did_exhaust for r in val_results)
+        did_exhaust = any(r.did_exhaust for r in val_results)
 
-            if error < best_error:
-                best_threshold = threshold
-                best_error = error
+        if error < best_error:
+            best_threshold = threshold
+            best_error = error
 
-            final_threshold = threshold
+        final_threshold = threshold
 
-            # Reset the bounds to speed up the next iteration
-            upper = threshold * THRESHOLD_FACTOR_UPPER
-            lower = threshold * THRESHOLD_FACTOR_LOWER
+        # Reset the bounds to speed up the next iteration
+        upper = threshold * THRESHOLD_FACTOR_UPPER
+        lower = threshold * THRESHOLD_FACTOR_LOWER
 
-            energy_margin += MARGIN_FACTOR
+        # energy_margin += MARGIN_FACTOR
+        if error == 10000000:
+            break
 
-        # threshold_map[policy_name][collect_mode][str(round(collection_rate, 2))] = final_threshold
         threshold_map[policy_name][collect_mode][str(round(collection_rate, 2))] = best_threshold
 
         if args.should_print:
             print('==========')
 
-    print(threshold_map)
+
+    # print(best_threshold)
+    # print(threshold_map)
 
     # Save the results
     save_json_gz(threshold_map, output_file)

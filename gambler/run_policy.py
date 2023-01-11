@@ -19,11 +19,11 @@ from gambler.utils.analysis import normalized_mae, normalized_rmse
 from gambler.utils.file_utils import read_pickle_gz, save_json_gz, save_pickle_gz, read_json_gz
 from gambler.utils.loading import load_data
 from gambler.utils.data_manager import get_data
+from gambler.utils.misc_utils import flatten
 
 
 def write_dataset(inputs, labels, filename, output_folder):
     # Write new dataset to h5 file
-    # partition_folder = os.path.join('datasets', output_folder)
     partition_folder = os.path.join('./datasets', output_folder)
     if not os.path.exists(partition_folder):
         os.mkdir(partition_folder)
@@ -44,15 +44,14 @@ if __name__ == '__main__':
     parser.add_argument('--policy', type=str, required=True)
     parser.add_argument('--collection-rate', type=float, required=True)
     parser.add_argument('--classes', type=int, nargs='+', default=[])
-    parser.add_argument('--train', action='store_true')                 # used for debugging
-    parser.add_argument('--fold', default='test')                       # used for debugging
-    parser.add_argument('--model', type=str, default='')            # used for debugging
+    parser.add_argument('--fold', default='test')
+    parser.add_argument('--model', type=str, default='')
+    parser.add_argument('--reconstruction-plot', type=str, default='window')
     parser.add_argument('--print-label-errors', action='store_true')
     parser.add_argument('--print-label-rates', action='store_true')
     parser.add_argument('--graph-cr', action='store_true')
     parser.add_argument('--should-enforce-budget', action='store_true')
-    parser.add_argument('--output-folder', type=str, default='')
-    parser.add_argument('--window-size', type=int, default=100)
+    parser.add_argument('--window-size', type=int, default=20)
     parser.add_argument('--max-skip', type=int, default=0)
     parser.add_argument('--feature', type=int, default=0)
     parser.add_argument('--max-num-samples', type=int)
@@ -62,34 +61,35 @@ if __name__ == '__main__':
     random.seed(42)
     
     # Load the data
-    inputs, labels = load_data(dataset_name=args.dataset, fold=args.fold, dist='')
+    input_seqs, labels = load_data(dataset_name=args.dataset, fold=args.fold)
     labels = labels.reshape(-1)
 
-    # Unpack the shape
-    num_seq, seq_length, num_features = inputs.shape
-
     # Rearrange data for experiments
-    inputs, labels = get_data(args, inputs, labels)
+    inputs, labels = get_data(args.classes, input_seqs, labels)
 
-    # Make the policy
-    collection_rate = args.collection_rate
+    # Unpack the shape
+    # num_seqs, seq_lengths, num_features = input_seqs.shape
+    num_seqs, seq_lengths, num_features = inputs.shape
 
     # Merge sequences into continous stream
-    inputs = inputs.reshape(inputs.shape[0]*seq_length, num_features)
+    inputs = inputs.reshape(num_seqs*seq_lengths, num_features)
 
     # Unpack the shape
     seq_length, num_features = inputs.shape
 
+    # Make the policy
+    collect_mode = 'tiny'
     policy = BudgetWrappedPolicy(name=args.policy,
-                                 num_seq=num_seq,
-                                 seq_length=inputs.shape[0],
+                                 num_seq=num_seqs,
+                                 seq_length=seq_length,
                                  num_features=num_features,
                                  dataset=args.dataset,
                                  collection_rate=args.collection_rate,
-                                 collect_mode='tiny',
+                                 collect_mode=collect_mode,
                                  window_size=args.window_size,
                                  model=args.model,
                                  max_skip=args.max_skip)
+
 
     errors: List[float] = []
     measurements: List[np.ndarray] = []
@@ -97,170 +97,141 @@ if __name__ == '__main__':
     
     collected_counts = defaultdict(list)
     collected: List[List[int]] = []
-    training_data: List[List[float]] = []
     
     collected_nums: List[int] = []
     collection_ratios: List[List[float]] = []
     window_labels: List[int] = []
 
-    max_num_seq = num_seq if args.max_num_samples is None else min(num_seq, args.max_num_samples)
+    max_num_seq = num_seqs if args.max_num_samples is None else min(num_seqs, args.max_num_samples)
 
     policy.init_for_experiment(num_sequences=max_num_seq)
-
-    collected_seq = num_seq           # The number of sequences collected under the budget
 
     # Run the policy
     policy_result = run_policy(policy=policy,
                                 sequence=inputs,
-                                should_enforce_budget=args.should_enforce_budget
-                                )
+                                should_enforce_budget=True)
 
     collected_list = policy_result.measurements
-    collected_indices = policy_result.collected_indices
+    estimate_list = policy_result.estimate_list
+    collected_indices = flatten(policy_result.collected_indices)
+    errors = policy_result.errors
 
     # Stack collected features into a numpy array
     collected = np.vstack(collected_list) if len(collected_list) > 0 else np.zeros([policy.window_size, num_features])  # [K, D]
+
+    # Reconstruct the sequence
     reconstructed = reconstruct_sequence(measurements=collected,
                                         collected_indices=collected_indices,
-                                        seq_length=inputs.shape[0])
-    
-    estimate_list = reconstructed
+                                        seq_length=seq_length)
 
-    # Calculate error
+    # Calculate errors
     mae = mean_absolute_error(y_true=inputs, y_pred=reconstructed)
     norm_mae = normalized_mae(y_true=inputs, y_pred=reconstructed)
     rmse = mean_squared_error(y_true=inputs, y_pred=reconstructed, squared=False)
     norm_rmse = normalized_rmse(y_true=inputs, y_pred=reconstructed)
-    r2 = r2_score(y_true=inputs, y_pred=reconstructed, multioutput='variance_weighted')                                      
+    r2 = r2_score(y_true=inputs, y_pred=reconstructed, multioutput='variance_weighted')
 
-    training_data += policy_result.training_data
+    num_measurements = seq_length
+    num_collected = len(collected_indices)
 
-    # Save training data
-    if args.train:
-        # with open(f'test/{args.dataset}/{args.fold}.csv', 'w') as f:
-        #     csvwriter = csv.writer(f)
-        #     csvwriter.writerows(training_data)
+    # Compute collection rate for each label (class)
+    if args.print_label_rates:
+        unique_labels = set(labels)
+        rates_dict = {}
+
+        left, right = 0, 0
+        first, last = 0, 0
+        for label in unique_labels:
+            # Find sequences of each label
+            label_indices = np.where(labels == label)[0]
+            last += len(label_indices)*seq_lengths
+
+            try:
+                right = next(i for i,val in enumerate(collected_indices) if val > last) - 1
+            except:
+                right = len(collected_indices) - 1
+
+            rates_dict[label] = (right-left+1)/len(collected_indices)
+
+            left = right+1
+            first = last+1
         
-        with open(f'train/{args.dataset}/{args.fold}.csv', 'a') as f:
-            csvwriter = csv.writer(f)
-            csvwriter.writerows(training_data)            
+        print(rates_dict)
 
-    num_measurements = inputs.shape[0]
-    num_samples = num_measurements
-    num_collected = len(policy_result.collected_indices)
+    # Compute error for each label (class)
+    if args.print_label_errors:
+        unique_labels = set(labels)
+        errors_dict = {}
 
-    # Print average collection rate for individual labels
-    # if args.print_label_rates:
-    # if True:
-    #     label_counts = Counter(labels)
-    #     label_idx = 0
-    #     left, right = 0, 0
-    #     for label in label_counts.keys():
-    #         count = label_counts[label]
-    #         left = right
-    #         right = left+count*seq_length 
+        for label in unique_labels:
+            # Find sequences of each label
+            label_indices = np.where(labels == label)[0]
+            first = label_indices[0]
+            last = label_indices[len(label_indices)-1]
 
-    #         # print(policy_result.collected_indices)
-    #         try:
-    #             res = next(x for x,val in enumerate(policy_result.collected_indices) if val >= right)
-    #         except:
-    #             res = len()
-    #         # print(right)
-    #         print("RESSSSS: ", str(res))
+            # Compute error of true signal and reconstructed
+            y_seq, y_length, _ = input_seqs[first:last].shape
+            y_true = input_seqs[first:last].reshape(y_seq*y_length, num_features)
+            errors_dict[label] = mean_absolute_error(y_true=y_true, y_pred=reconstructed[first*seq_lengths:last*seq_lengths])
 
-    #         # crs = [collection_ratios[i] for i in label_idx]
-    #         # crs = [c for cr in crs for c in cr]
-    #         # print(sum(crs)/len(crs))
-
-    # collection_ratios = [cr for collection_ratio in policy_result.collection_ratios for cr in collection_ratio] # flatten
+        print(errors_dict)
 
     # Graph collection rate for each window
     if args.graph_cr:
-        plt.plot(policy_result.collection_ratios, label='Collection Rate')
-        plt.title(f'{args.policy.upper()} ({args.dataset.upper()}): Collection Rate over Time')
-        # ax = plt.gca()
-        # ax.set_ylim([0, 1])
-        plt.legend()
+        with plt.style.context('seaborn-ticks'):
+            plt.plot(policy_result.collection_ratios, label='Collection Rate')
+            plt.title(f'{args.policy.upper()} ({args.dataset.upper()}): Collection Rate over Time')
+            plt.ylim([0, 1])
+            plt.legend()
+            plt.show()
+
+    print('{0:.5f},{1},{2} ({3})'.format(mae, num_collected, num_measurements, num_collected/num_measurements))
+
+    if args.reconstruction_plot == 'window':
+        # Plot window reconstruction
+        data_idx = np.argmax(errors)
+        left = data_idx*args.window_size
+        right = left+args.window_size
+
+        true_inputs = inputs[left:right]
+        reconstructed = reconstructed[left:right]
+
+        estimates = reconstructed
+        collected_idx = policy_result.window_indices[data_idx]
+
+    elif args.reconstruction_plot == 'sequence':
+        # Plot sequence reconstruction
+        data_idx = 2
+        left = data_idx*num_seqs
+        right = left+seq_lengths
+
+        true_inputs = inputs[left:right]
+        reconstructed = reconstructed[left:right]
+
+        estimates = reconstructed
+        collected_idx = collected_indices[left:right]
+
+    elif args.reconstruction_plot == 'all':
+        # Plot reconstruction for all data
+        true_inputs = inputs
+        estimates = reconstructed
+        collected_idx = collected_indices
+
+    print('Max Error: {0:.5f} (Idx: {1})'.format(errors[data_idx], data_idx))
+    print('Max Error Collected: {0}'.format(len(collected_idx)))
+
+    with plt.style.context('seaborn-ticks'):
+        fig, ax1 = plt.subplots()
+
+        # xs = list(range(args.window_size))
+        xs = list(range(len(reconstructed)))
+        ax1.plot(xs, true_inputs[:, args.feature], label='True', color='royalblue')
+        ax1.plot(xs, reconstructed[:, args.feature], label='Inferred', color='orange')
+        # ax1.scatter(collected_idx, estimates[collected_idx, args.feature], marker='o', color='orange')
+
+        ax1.set_xlabel('Time Step')
+        ax1.set_ylabel('Feature Value')
+
+        ax1.legend()
+
         plt.show()
-
-    # Calculate error for individual labels
-    # if args.print_label_errors:
-    #     unique_labels = set(labels)
-    #     error_dict = {}
-    #     for label in unique_labels:
-    #         label_idx = np.where(labels == label)[0]
-    #         label_errors = [errors [i] for i in label_idx]
-    #         avg_error = sum(label_errors)/len(label_errors)
-    #         error_dict[label] = avg_error
-    #     # print(error_dict)
-
-    # # Calculate different error metrics
-    # avg_seq_error = sum(errors)/len(errors)
-    # avg_label_error = sum(error_dict.values())/len(error_dict)
-
-    # Log information for graphing
-    # if len(args.output_folder) > 0:
-    #     # Save the results
-    #     result_dict = {
-    #         'mae': mae,
-    #         'rmse': rmse,
-    #         'norm_mae': norm_mae,
-    #         'norm_rmse': norm_rmse,
-    #         'r2_score': r2,
-    #         'collection_ratios': collection_ratios,
-    #         'num_measurements': num_measurements,
-    #         'num_collected': num_collected,
-    #         'policy': policy.as_dict()
-    #     }
-
-    #     output_path = os.path.join(args.output_folder, '{0}_{1}.json.gz'.format(str(policy), int(policy.collection_rate * 100)))
-    #     save_json_gz(result_dict, output_path)
-
-    sampling_ratio = num_collected/num_samples
-    collected_seqs = num_seq - collected_seq
-
-    # print(f'Reconstruction Error: {mae}')
-    # print(f'Average Error per Sequence: {avg_error}')
-    # print(f'Sampling Ratio: {num_collected}/{num_samples} ({sampling_ratio})')
-    # print(f'Missed Sequences: {collected_seqs}/{num_seq}')
-
-    # PRINT
-    print('{0:.5f},{1},{2} ({3})'.format(mae, num_collected, num_samples, sampling_ratio))
-    # print('{0:.5f},{1},{2} ({3}) Missed Seqs: {4}/{5}'.format(avg_label_error, num_collected, num_samples, sampling_ratio, collected_seqs, num_seq))
-    # print('MAE: {0:.7f}, Norm MAE: {1:.5f}, RMSE: {2:.5f}, Norm RMSE: {3:.5f}, R^2: {4:.5f}'.format(mae, norm_mae, rmse, norm_rmse, r2))
-    # print('Number Collected: {0} / {1} ({2:.4f})'.format(num_collected, num_samples, num_collected / num_samples))
-    # print('Collected: {0} / {1}'.format(collected_seq, max_num_seq))
-
-    # # data_idx = np.argmax(errors)
-    # estimates = estimate_list
-    # collected_idx = collected_indices
-
-    # inputs = [(s[0]**2 + s[1]**2 + s[2]**2)**0.5 for s in inputs]
-    # estimates = [(s[0]**2 + s[1]**2 + s[2]**2)**0.5 for s in estimates]
-
-    # scat = [sample for i,sample in enumerate(estimates) if i in collected_idx]
-
-    # # print('Max Error: {0:.5f} (Idx: {1})'.format(errors[data_idx], data_idx))
-    # # print('Max Error Collected: {0}'.format(len(collected_idx)))
-
-    # print('Label Distribution')
-    # for label, counts in collected_counts.items():
-    #     print('{0} -> {1:.2f} ({2:.2f})'.format(label, np.average(counts), np.std(counts)))
-
-    # plt.rcParams.update({'font.size': 22})
-
-    # with plt.style.context('seaborn-ticks'):
-    #     fig, ax1 = plt.subplots(figsize=(10, 8))
-    #     ax1.set_ylim([0, 5])
-
-    #     xs = list(range(seq_length))
-    #     ax1.plot(xs, inputs, label='True')
-    #     ax1.plot(xs, estimates, label='Inferred')
-    #     ax1.scatter(collected_idx, scat, marker='o', color='orange')
-
-    #     ax1.set_xlabel('Time Step')
-    #     ax1.set_ylabel('Acceleration')
-
-    #     ax1.legend()
-
-    #     plt.show()

@@ -4,7 +4,7 @@ import numpy as np
 from typing import Tuple
 
 
-def load_data(dataset_name: str, fold: str, dist: str, filename: str='') -> Tuple[np.ndarray, np.ndarray]:
+def load_data(dataset_name: str, fold: str, filename: str='') -> Tuple[np.ndarray, np.ndarray]:
     """
     Loads the dataset inputs and labels.
     Args:
@@ -15,8 +15,8 @@ def load_data(dataset_name: str, fold: str, dist: str, filename: str='') -> Tupl
     """
     dirname = os.path.dirname(__file__)
     
-    dist_name = 'data.h5' if dist == '' else f'data_{dist}.h5'
-    dataset_file = dist_name if filename == '' else filename
+    name = 'data.h5'
+    dataset_file = name if filename == '' else filename
 
     data_file = os.path.join(dirname, '..', 'datasets', dataset_name, fold, dataset_file)
 

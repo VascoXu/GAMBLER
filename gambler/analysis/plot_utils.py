@@ -1,3 +1,4 @@
+import numpy as np
 import matplotlib.pyplot as plt
 
 PLOT_STYLE = 'seaborn-ticks'
@@ -8,10 +9,20 @@ ANNOTATE_FONT = 14
 LEGEND_FONT = 12
 AXIS_FONT = 14
 TITLE_FONT = 16
-PLOT_SIZE = (8, 6)
+PLOT_SIZE = (12, 6)
+
+COLORS = {
+    'uniform': '#3575b0', 
+    'adaptive_heuristic': '#fc8d59',
+    'adaptive_deviation': '#c2a5cf',
+    'adaptive_uniform': '#9ecae1', 
+    'adaptive_budget': '#a4d466',
+    'adaptive_prob': '#dfc27d', 
+    'adaptive_gambler': '#d73027',
+}
 
 # https://stackoverflow.com/questions/14270391/python-matplotlib-multiple-bars
-def bar_plot(ax, data, colors=None, total_width=0.8, single_width=1.0, legend=[]):
+def bar_plot(ax, data, error={}, colors=None, total_width=0.8, single_width=1.0, legend=[]):
     """Draws a bar plot with multiple bars per data point.
 
     Parameters
@@ -57,18 +68,30 @@ def bar_plot(ax, data, colors=None, total_width=0.8, single_width=1.0, legend=[]
     # List containing handles for the drawn bars, used for the legend and drawing text
     bars = []
     all_bars = []
+    xs = []
 
     # Iterate over all data
     for i, (name, values) in enumerate(data.items()):
         # The offset in x direction of that bar
         x_offset = (i - n_bars / 2) * bar_width + bar_width / 2
 
-        # Draw a bar for every value of that type
-        for x, y in enumerate(values):
-            bar = ax.bar(x + x_offset, y, width=bar_width * single_width, color=colors[i % len(colors)])
-            
+        """
+        # Draw a bar for every value of that type (with error bars)
+        for (x, value) in enumerate(zip(values, error[name])):
+            y, y_err = value
+            bar = ax.bar(x + x_offset, y, yerr=y_err, width=bar_width * single_width, color=colors[i % len(colors)], edgecolor=(0, 0, 0, 0.5))
             # Add handle for drawn bar for drawing text
             all_bars.append(bar[0])
+
+            xs.append(x)
+        """
+
+        # Draw a bar for every value of that type
+        for (x, y) in enumerate(values):
+            bar = ax.bar(x + x_offset, y, width=bar_width * single_width, color=colors[i % len(colors)], edgecolor=(0, 0, 0, 0.5))
+            # Add handle for drawn bar for drawing text
+            all_bars.append(bar[0])
+            xs.append(x)
 
         # Add a handle to the last drawn bar, which we'll need for the legend
         bars.append(bar[0])
@@ -81,3 +104,5 @@ def bar_plot(ax, data, colors=None, total_width=0.8, single_width=1.0, legend=[]
     for bar in all_bars:
         y = bar.get_height()
         plt.text(bar.get_x(), y + 0.001, str(round(float(y), 3)), fontsize=8)
+
+    return xs

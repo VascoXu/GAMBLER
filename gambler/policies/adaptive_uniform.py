@@ -41,15 +41,15 @@ class AdaptiveUniform(AdaptiveLiteSense):
         self._seq_length = seq_length
         self._window_idx = 0
 
-        # Policy parameters
+        # Policy-specific parameters
         self._budget = seq_length*collection_rate
-        self._total_samples = seq_length
-        self._total_time = self._total_samples
         self._budget_cutoff = self._budget * 0.5
+        self._total_time = seq_length
         self._samples_collected = 0
         self._samples_seen = 0
-        self._skip_indices: List[int] = []
         self._adaptive = True
+        
+        self._skip_indices: List[int] = []
 
     @property
     def policy_type(self) -> PolicyType:
@@ -60,20 +60,21 @@ class AdaptiveUniform(AdaptiveLiteSense):
         (window_idx, window_num) = window
         self._samples_seen += 1
 
-        if self._samples_seen >= self._budget_cutoff and self._adaptive and window_idx == 0:
+        if (self._adaptive) and (self._samples_collected >= self._budget_cutoff) and (window_idx == 0):
+            # window uniform approach
             samples_left = self._budget - self._samples_collected
             windows_left = math.ceil(self._seq_length/self._window_size) - window_num 
             target_samples = math.floor(samples_left/windows_left)
-            leftover_rate = target_samples / self._window_size
+            target_rate = target_samples / self._window_size
 
-            skip = 1 if leftover_rate == 0 else max(1.0 / leftover_rate, 1) # TODO: check for correctness
+            skip = 1 if target_rate == 0 else max(1.0 / target_rate, 1)
             frac_part = skip - math.floor(skip)
 
             index = 0
-            while index < self._seq_length:
+            while index < self._window_size:
                 self._skip_indices.append(index)
 
-                if (target_samples - len(self._skip_indices)) == (self._seq_length - index - 1):
+                if (target_samples - len(self._skip_indices)) == (self._window_size - index - 1):
                     index += 1
                 else:
                     r = self._rand.uniform()
@@ -81,6 +82,7 @@ class AdaptiveUniform(AdaptiveLiteSense):
                         index += int(math.floor(skip))
                     else:
                         index += int(math.ceil(skip))
+
 
             self._skip_indices = self._skip_indices[:target_samples]
             self._skip_idx = 0
@@ -96,12 +98,10 @@ class AdaptiveUniform(AdaptiveLiteSense):
             return False
         else:
             # Execute Uniform Policy
-            if (self._skip_idx < len(self._skip_indices) and self._window_idx == self._skip_indices[self._skip_idx]):
-                self._skip_idx += 1
-                self._window_idx += 1
-                return True
-
             self._window_idx += 1
+            if (self._skip_idx < len(self._skip_indices) and self._window_idx-1 == self._skip_indices[self._skip_idx]):
+                self._skip_idx += 1
+                return True
 
             return False
 

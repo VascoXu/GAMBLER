@@ -12,6 +12,7 @@ from gambler.utils.analysis import normalized_mae, normalized_rmse
 from gambler.utils.file_utils import read_json, read_pickle_gz, read_json_gz
 from gambler.utils.data_types import PolicyType, PolicyResult, CollectMode
 from gambler.policies.budget_wrapped_policy import BudgetWrappedPolicy
+from gambler.utils.misc_utils import flatten
 
 
 def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce_budget: bool) -> PolicyResult:
@@ -38,17 +39,17 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce
     seq_length, num_features = sequence.shape
 
     # Unpack collection information
-    curr_window_size = 0
-    collected_within_window = 0
+    window_cnt = 0
     window_num = 0
-    sample_num = 0
 
     # Lists to hold the results
-    # collected_idx: List[List[int]] = []
-    collected_idx: List[int] = []
     measurement_list: List[np.ndarray] = []
-    collected_list: List[np.ndarray] = []
+    measurements: List[np.ndarray] = []
+    estimate_list: List[np.ndarray] = []
     collected_indices: List[int] = []
+    collected_idx: List[int] = []
+    window_indices: List[List] = []
+    window_idx: List[int] = []
 
     # List to hold
     collection_ratios: List[float] = []
@@ -56,32 +57,32 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce
 
     # Execute the policy on the given sequence
     for seq_idx in range(seq_length):
-        should_collect = policy.should_collect(seq_idx=seq_idx, window=(curr_window_size, window_num)) #TODO: change to window NUM
+        should_collect = policy.should_collect(seq_idx=seq_idx, window=(window_cnt, window_num))
 
-        if should_collect and not policy.has_exhausted_budget():
+        if should_collect and not (should_enforce_budget and policy.has_exhausted_budget()):
             measurement = sequence[seq_idx]
 
             policy.collect(measurement=measurement)
 
-            collected_list.append(measurement.reshape(1, -1))
+            measurements.append(measurement.reshape(1, -1))
             measurement_list.append(measurement.reshape(1, -1))
 
             collected_idx.append(seq_idx)
-            collected_indices.append(sample_num)
+            window_idx.append(window_cnt)
 
-            collected_within_window += 1
 
-        curr_window_size += 1
-        sample_num += 1
+        window_cnt += 1
         
         # Update policies after each window
-        if curr_window_size == policy.window_size:
-            collection_ratio = (collected_within_window/policy.window_size)
+        if (window_cnt == policy.window_size) or (seq_idx == seq_length-1):
+            collected_within_window = len(window_idx)
+
+            collection_ratio = (collected_within_window/window_cnt)
             collection_ratios.append(collection_ratio)
 
             # Update policy 
-            if policy.policy_type == PolicyType.ADAPTIVE_GAMBLER or policy.policy_type == PolicyType.ADAPTIVE_UNIFORM or policy.policy_type == PolicyType.ADAPTIVE_TRAIN or policy.policy_type == PolicyType.ADAPTIVE_BUDGET or policy.policy_type == PolicyType.ADAPTIVE_BANDIT:
-                policy.update(collection_ratio, seq_idx, window=(curr_window_size, window_num))
+            if policy.policy_type != PolicyType.ADAPTIVE_DEVIATION and policy.policy_type != PolicyType.ADAPTIVE_HEURISTIC:
+                policy.update(collection_ratio, seq_idx, window=(window_cnt, window_num))
 
             policy.step(seq_idx=0, count=collected_within_window)
 
@@ -92,52 +93,39 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce
                 # Stack collected features into a numpy array
                 collected = np.vstack(measurement_list) # [K, D]
                 reconstructed = reconstruct_sequence(measurements=collected,
-                                                    collected_indices=collected_indices,
-                                                    seq_length=policy.window_size)
+                                                    collected_indices=window_idx,
+                                                    seq_length=window_cnt)
+                estimate_list.append(reconstructed)
 
+            # Compute reconstruction error for window
             left = window_num*policy.window_size
-            right = left+policy.window_size
-            true = sequence[left:right]
-            error = mean_absolute_error(y_true=true, y_pred=reconstructed)
+            right = left+policy.window_size 
+            true = sequence[left:right] if seq_idx < seq_length-1 else sequence[left:]
 
-            if collected_within_window > 0:
-                pass
-                # collected_seq = idx + 1
-            else:
+            if collected_within_window <= 0:
                 error = 1
+            else:
+                error = mean_absolute_error(y_true=true, y_pred=reconstructed)
 
             # Record the policy results
             errors.append(error)
-            measurement_list.append(reconstructed)
+            collected_indices.append(collected_idx)
+            window_indices.append(window_idx)
 
             # Reset window parameters
-            curr_window_size = 0
-            collected_within_window = 0
-            sample_num = 0
+            window_cnt = 0
             window_num += 1
 
             # Reset measurements parameters
             measurement_list: List[np.ndarray] = []
-            collected_indices: List[int] = []
+            collected_idx: List[int] = []
+            window_idx: List[int] = []
 
-    # reconstructed = np.vstack([np.expand_dims(r, axis=0) for r in measurement_list])  # [N, T, D]
-    # reconstructed = reconstructed.reshape(-1, num_features)
 
-    # Handle remaining/leftover measurements
-    # remaining_samples = seq_length-reconstructed.shape[0]
-    # collected = np.vstack(collected_list) if len(collected_list) > 0 else np.zeros([remaining_samples, num_features])  # [K, D]
-    # if len(collected_list) > 0:
-    #     leftover_reconstructed = reconstruct_sequence(measurements=collected,
-    #                                         collected_indices=collected_indices,
-    #                                         seq_length=remaining_samples)
-    # else:
-    #     leftover_reconstructed = collected
-    # reconstructed = np.concatenate((reconstructed, leftover_reconstructed))
-
-    training_data = policy.training if policy.policy_type == PolicyType.ADAPTIVE_TRAIN else []
-
-    return PolicyResult(measurements=collected_list,
-                        collected_indices=collected_idx,
+    return PolicyResult(measurements=measurements,
+                        estimate_list=estimate_list,
+                        window_indices=window_indices,
+                        collected_indices=collected_indices,
                         collection_ratios=collection_ratios,
-                        num_collected=len(collected_idx),
-                        training_data=training_data)
+                        num_collected=len(flatten(collected_indices)),
+                        errors=errors)

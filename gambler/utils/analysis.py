@@ -4,6 +4,15 @@ from sklearn.metrics import mean_squared_error, mean_absolute_error, mean_absolu
 from gambler.utils.constants import SMALL_NUMBER
 
 
+def mean_absolute_percentage_error(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+    """
+    Source: https://stackoverflow.com/questions/47648133/mape-calculation-in-python
+    
+    Compute Mean Absolute Percentage Error (MAPE)
+    """
+    return np.mean(np.abs((y_true - y_pred) / y_true)) * 100
+
+
 def normalized_rmse(y_true: np.ndarray, y_pred: np.ndarray) -> float:
     """
     Computed the RMSE normalized by the standard deviation.

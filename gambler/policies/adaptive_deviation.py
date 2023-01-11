@@ -15,6 +15,7 @@ class AdaptiveDeviation(AdaptiveLiteSense):
         return PolicyType.ADAPTIVE_DEVIATION
 
     def collect(self, measurement: np.ndarray):
+
         self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
         self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
 

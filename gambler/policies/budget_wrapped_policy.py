@@ -15,7 +15,7 @@ from gambler.policies.adaptive_train import AdaptiveTrain
 from gambler.policies.adaptive_heuristic import AdaptiveHeuristic
 from gambler.policies.adaptive_uniform import AdaptiveUniform
 from gambler.policies.adaptive_budget import AdaptiveBudget
-from gambler.policies.adaptive_bandit import AdaptiveBandit
+from gambler.policies.adaptive_prob import AdaptiveProb
 from gambler.policies.uniform_policy import UniformPolicy
 
 
@@ -53,15 +53,7 @@ class BudgetWrappedPolicy(Policy):
         self._consumed_energy = 0.0
         self._num_collected = 0
         self._total_samples = 0
-        self._budget = seq_length*collection_rate
-
-        # Get the data distributions for possible random sequence generation
-        # dirname = os.path.dirname(__file__)
-        # distribution_path = os.path.join(dirname, '../datasets', dataset, 'distribution.json')
-        # distribution = read_json(distribution_path)
-
-        # self._data_mean = np.array(distribution['mean'])
-        # self._data_std = np.array(distribution['std'])
+        self._budget = seq_length*collection_rate if 'budget' not in kwargs else kwargs['budget']
 
     @property
     def policy_type(self) -> PolicyType:
@@ -80,8 +72,9 @@ class BudgetWrappedPolicy(Policy):
         return self._policy.threshold
 
     @property
-    def training(self):
-        return self._policy.training if self._policy.policy_type ==  PolicyType.ADAPTIVE_TRAIN else []
+    def training_data(self):
+        assert(self._policy.policy_type ==  PolicyType.ADAPTIVE_TRAIN)
+        return self._policy.training_data
 
     def set_threshold(self, threshold: float):
         self._policy.set_threshold(threshold)
@@ -139,8 +132,6 @@ def make_policy(name: str,
     quantize_path = os.path.join(base, '../datasets', dataset, 'quantize.json')
 
     quantize_dict = read_json(quantize_path)
-    precision = quantize_dict['precision']
-    width = quantize_dict['width']
     max_skip = quantize_dict.get('max_skip', 1)
     use_min_skip = quantize_dict.get('use_min_skip', False)
     threshold_factor = quantize_dict.get('threshold_factor', 1.0)
@@ -158,7 +149,7 @@ def make_policy(name: str,
         threshold_path = os.path.join(base, '../saved_models', dataset, 'thresholds_stream.json.gz')
 
         temp_name = name
-        if name == 'adaptive_train' or name == 'adaptive_uniform' or name =='adaptive_elitesense' or name == 'adaptive_budget' or name =='adaptive_bandit':
+        if name == 'adaptive_train' or name == 'adaptive_uniform' or name =='adaptive_elitesense' or name == 'adaptive_budget' or name =='adaptive_prob' or name =='adaptive_gambler' or name =='adaptive_gamblerv2' or name =='adaptive_gamblerv3' or name =='adaptive_gamblerv4':
             name = 'adaptive_deviation'
 
         did_find_threshold = False
@@ -226,8 +217,14 @@ def make_policy(name: str,
             cls = AdaptiveBudget
         elif name == 'adaptive_gambler':
             cls = AdaptiveGambler
-        elif name == 'adaptive_bandit':
-            cls = AdaptiveBandit
+        elif name == 'adaptive_gamblerv2':
+            cls = AdaptiveGamblerV2
+        elif name == 'adaptive_gamblerv3':
+            cls = AdaptiveGamblerV3
+        elif name == 'adaptive_gamblerv4':
+            cls = AdaptiveGamblerV4               
+        elif name == 'adaptive_prob':
+            cls = AdaptiveProb
         elif name == 'adaptive_train':
             cls = AdaptiveTrain
         else:

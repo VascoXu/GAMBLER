@@ -6,100 +6,118 @@ from argparse import ArgumentParser
 import matplotlib.pyplot as plt
 import h5py
 import os
+import csv
+from typing import List, Tuple
+import random
 import pickle
 
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.tree import DecisionTreeRegressor
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVR
 from sklearn.model_selection import train_test_split
 from sklearn.model_selection import GridSearchCV
+from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
 
-from gambler.analysis.plot_utils import bar_plot
-from gambler.utils.cmd_utils import run_command
-from gambler.utils.loading import load_data
+from gambler.utils.data_utils import reconstruct_sequence
+from gambler.policies.policy_utils import run_policy
+from gambler.policies.budget_wrapped_policy import BudgetWrappedPolicy
+from gambler.utils.analysis import normalized_mae, normalized_rmse
 from gambler.utils.file_utils import read_pickle_gz, save_json_gz, save_pickle_gz, read_json_gz
+from gambler.utils.loading import load_data
+from gambler.utils.data_manager import get_data
+from gambler.utils.misc_utils import flatten
 
-TRAIN_CMD = 'python3 run_policy.py --dataset {0} --policy adaptive_train --collection-rate {1} --window-size {2} --distribution {3} --fold {4} --train --should-enforce-budget'
+
+def train_gambler(dataset, window_size, fold):
+   # List of collection rates
+    collection_rates = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    
+    # Load the data
+    inputs, labels = load_data(dataset_name=dataset, fold=fold)
+    labels = labels.reshape(-1)
+
+    # Unpack the shape
+    num_seqs, seq_lengths, num_features = inputs.shape
+
+    # Merge sequences into continous stream
+    inputs = inputs.reshape(num_seqs*seq_lengths, num_features)
+
+    # Unpack the shape
+    seq_length, num_features = inputs.shape
+
+    for collection_rate in collection_rates:
+        # Make the policy
+        collect_mode = 'tiny'
+        policy_name = 'adaptive_train'
+        policy = BudgetWrappedPolicy(name=policy_name,
+                                    num_seq=num_seqs,
+                                    seq_length=seq_length,
+                                    num_features=num_features,
+                                    dataset=dataset,
+                                    collection_rate=collection_rate,
+                                    collect_mode=collect_mode,
+                                    window_size=window_size,
+                                    model='',
+                                    max_skip=0)
+
+        max_num_seq = num_seqs
+
+        policy.init_for_experiment(num_sequences=max_num_seq)
+
+        # Run the policy
+        _ = run_policy(policy=policy,
+                       sequence=inputs,
+                       should_enforce_budget=True)
+    
+        with open(f'train/{dataset}/{fold}_{window_size}.csv', 'a') as f:
+            csvwriter = csv.writer(f)
+            csvwriter.writerows(policy.training_data)
 
 
 if __name__ == '__main__':
-    """Join training and testing datasets"""
+    """Train GAMBLER"""
+
     parser = ArgumentParser()
-    parser.add_argument('--dataset', type=str, required=True)
-    parser.add_argument('--window-size', type=int, default=100)
+    parser.add_argument('--datasets', type=str, nargs='+', required=True)
+    parser.add_argument('--window-size', type=int, default=20)
+    parser.add_argument('--should-retrain', action='store_true')
+    parser.add_argument('--should-print', action='store_true')
     args = parser.parse_args()
 
-    budgets = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    # Seed for reproducible results
+    random.seed(42)
 
-    # Remove file, if exists
-    train_filename = f'train/{args.dataset}/train.csv'
-    val_filename = f'train/{args.dataset}/test.csv'
+    for dataset in args.datasets:
+        train_filename = f'train/{dataset}/train_{args.window_size}.csv'
+        val_filename = f'train/{dataset}/val_{args.window_size}.csv'
+        test_filename = f'train/{dataset}/test_{args.window_size}.csv'
 
-    """
-    try:
-        os.remove(train_filename)
-        os.remove(val_filename)
-    except OSError:
-        pass
+        if args.should_retrain:
+            try:
+                os.remove(train_filename)
+                os.remove(test_filename)
+            except OSError:
+                pass
 
-    # Generate training set
-    for budget in budgets:
-        cmd = TRAIN_CMD.format(args.dataset, budget, args.window_size, '\'\'', 'train')
-        print(cmd)
-        res = run_command(cmd)
+            train_gambler(dataset, args.window_size, 'train')
+            train_gambler(dataset, args.window_size, 'test')
 
-    print("Done Generating Training Dataset")
+        # Load training data
+        training_set = pd.read_csv(train_filename)
+        X_train = training_set.iloc[:, 0:2].values.tolist()
+        y_train = training_set.iloc[:, 2:].values.ravel()
 
-    # Generate validation set
-    for budget in budgets:
-        cmd = TRAIN_CMD.format(args.dataset, budget, args.window_size, '\'\'', 'test')
-        print(cmd)
-        res = run_command(cmd)
+        # Load testing data
+        testing_set = pd.read_csv(test_filename)
+        X_test = testing_set.iloc[:, 0:2].values.tolist()
+        y_test = testing_set.iloc[:, 2:].values.ravel()
 
-    print("Done Generating Validation Dataset")
+        # Train Decision Tree Regressor
+        model = DecisionTreeRegressor(max_depth=8, random_state=42).fit(X_train, y_train)
+        pickle.dump(model, open(f'saved_models/{dataset}/models/gambler_model_{args.window_size}', 'wb'))
 
-    print("Train Random Forest")
-    """
-
-    # Load training data
-    training_set = pd.read_csv(train_filename)
-    X_train = training_set.iloc[:, 0:2].values.tolist()
-    y_train = training_set.iloc[:, 2:].values.ravel()
-
-    X_train = X_train[:-1]
-    y_train = y_train[1:]
-
-    # Load validation set
-    validation_set = pd.read_csv(val_filename)
-    X_val = training_set.iloc[:, 0:2].values.tolist()
-    y_val = training_set.iloc[:, 2:].values.ravel()
-
-    X_val = X_val[:-1]
-    y_val = y_val[1:]
-
-    print("Finished Partition")
-    
-    model = DecisionTreeRegressor(max_depth=5, random_state=42).fit(X_train, y_train)
-    # model = RandomForestRegressor(n_estimators=5, max_depth=7, random_state=42).fit(X_train, y_train)
-    # model = RandomForestRegressor(n_estimators=3, max_depth=8, random_state=42).fit(X_train, y_train)
-
-    """
-    Best parameters for individual datasets
-    
-    Pavement
-    {'max_depth': 8, 'n_estimators': 3}
-    """
-
-    # # Grid search for best parameters
-    # param_grid = { 
-    #     'n_estimators': [3, 5, 10, 30, 50, 100],
-    #     'max_depth' : [4,5,6,7,8],
-    # }
-
-    # CV_rfc = GridSearchCV(estimator=model, param_grid=param_grid, cv= 5)
-    # CV_rfc.fit(X_train, y_train)
-    # print(CV_rfc.best_params_)
-
-    print(model.score(X_val, y_val))
-    pickle.dump(model, open(f'saved_models/{args.dataset}/random_forest/rf', 'wb'))
-
+        if args.should_print:
+            print(f'{dataset.capitalize()} {args.window_size}')
+            print('Model accuracy: ', model.score(X_test, y_test))

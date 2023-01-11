@@ -3,43 +3,42 @@ import random
 
 from gambler.utils.loading import load_data
 
-def get_data(args, inputs, labels):
-    # Unpack the shape
-    num_seq, seq_length, num_features = inputs.shape
+def get_data(classes, inputs, labels):
+    """
+    Rearrange dataset for testing.
+    Args:
+        classes: The desired list of classes 
+        inputs: The input data
+        labels: The input labels
+    Returns:
+        A tuple of (1) [N, T, D] inputs and (2) [N] labels.
+    """
 
-    inputs, labels = load_data(dataset_name=args.dataset, fold=args.fold, dist='')
-    num_seq = len(labels)
+    if len(classes) > 0:
+        _inputs = []
+        _labels = []
 
-    if len(args.classes) > 0:
-        """Specify classes"""
-        label_parts = []
-        input_parts = []
-
-        for label in args.classes:
+        for label in classes:
+            # Find indices of the desired class
             label_idx = np.where(labels == label)[0]
 
-            # pick random sequence
-            random_idx = random.choice(label_idx)
-            random_idx = label_idx[0]
+            # Pick a random sequence of the desired class
+            seq_idx = random.choice(label_idx)
+            seq = inputs[seq_idx]
+            label = labels[seq_idx]
 
-            input_seq = inputs[random_idx]
-            label_seq = labels[random_idx]
-            if seq_length == 1:
-                input_seq = input_seq[0]
+            # if # TODO: fix for when data is one large sequence
 
-            input_parts.append(np.asarray(input_seq))
-            label_parts.append(np.asarray(label_seq))
+            _inputs.append(np.asarray(seq))
+            _labels.append(np.asarray(label))
 
-            """
-            # pick all sequences from label
-            input_parts.append(np.asarray([inputs[i] for i in label_idx]))
-            label_parts.append(np.asarray([labels[i] for i in label_idx]))
+        return (np.array(_inputs), np.array(_labels))
 
-        input_parts = [item for chunk in input_parts for item in chunk] # flatten list
-        label_parts = [item for chunk in label_parts for item in chunk] # flatten list
-        """
+        # desired_label = int(classes[0])
+        # label_idx = np.where(labels == desired_label)[0]
+        # inputs = np.asarray([inputs[i] for i in label_idx])
+        # labels = np.asarray([labels[i] for i in label_idx])
 
-        return (np.array(input_parts), np.array(label_parts))
-
+        # return (inputs, labels)
     
     return (inputs, labels)

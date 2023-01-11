@@ -22,11 +22,6 @@ from gambler.utils.action import Action
 from gambler.utils.distribution import load_distribution
 from gambler.utils.file_utils import read_pickle_gz, save_json_gz, save_pickle_gz, read_json_gz
 from gambler.utils.loading import load_data
-from gambler.utils.measurements import translate_measurement
-
-
-def sigmoid(x):
-    return 1 / (1 + math.exp(-x))
 
 
 class AdaptiveGambler(AdaptiveLiteSense):
@@ -65,20 +60,11 @@ class AdaptiveGambler(AdaptiveLiteSense):
         self._window_idx = 0
 
         # Policy parameters
-        self._moving_dev = 0
-        self._moving_mean = 0
-        self._dev_count = 0
-        self._mean_count = 0
+        self._avg_dev: List[float] = []
+        self._avg_mean: List[float] = []
         self.mean = 0
         self.dev = 0
-        self._window_dev = 0
 
-        # TODO
-        self._sigma = 0
-        self.K = 0.01
-
-        self._moving_rate = collection_rate
-        
         # Budget parameters
         self._samples_collected = 0
         self._total_samples = seq_length
@@ -87,7 +73,7 @@ class AdaptiveGambler(AdaptiveLiteSense):
 
         # Model parameters
         self._collection_rate = collection_rate
-        model_name = f'saved_models/{dataset}/random_forest/rf' if model == '' else model
+        model_name = f'saved_models/{dataset}/models/gambler_model_{self._window_size}' if model == '' else model
         self.model = pickle.load(open(model_name, 'rb'))
 
         # Fit default uniform policy
@@ -114,9 +100,11 @@ class AdaptiveGambler(AdaptiveLiteSense):
         self._skip_indices = self._skip_indices[:target_samples]
         self._skip_idx = 0
 
+
     @property
     def policy_type(self) -> PolicyType:
         return PolicyType.ADAPTIVE_GAMBLER
+
 
     def should_collect(self, seq_idx: int, window: tuple) -> bool:
         self._window_idx += 1
@@ -128,42 +116,34 @@ class AdaptiveGambler(AdaptiveLiteSense):
 
         return False
 
+
     def update(self, collection_ratio: float, seq_idx: int, window: tuple):
         # Update deviation
-        _dev = 0 if self._dev_count == 0 else self._moving_dev / self._dev_count
-        _mean = 0 if self._mean_count == 0 else self._moving_mean / self._mean_count
-
-        self._window_dev = _dev
-
-        error = self.K * abs(np.sum(self._sigma) - np.sum(_dev))
-
-        self._sigma = _dev
+        _dev = 0 if not self._avg_dev else sum(self._avg_dev)/len(self._avg_dev)
+        _mean = 0 if not self._avg_mean else sum(self._avg_mean)/len(self._avg_mean)
 
         # Update time
         self._total_samples -= self._window_size
         leftover = self._budget - self._samples_collected
-        
         budget_left = leftover / self._total_samples if self._total_samples > 0 else 0
 
+        """
         time_left = self._total_samples
         time_spent = (self._total_time - self._total_samples)
-
+        
+        # Weighted average using time remaining
         alpha = time_left / self._total_time
         beta = time_spent / self._total_time
+        """
 
-        # beta = sigmoid(error + math.log(time_spent/self._total_time))
-        # alpha = 1 - beta
-
-        ALPHA = leftover / self._budget
-        BETA = self._samples_collected / self._budget
+        # Weighted average using budget remaining
+        alpha = leftover / self._budget
+        beta = self._samples_collected / self._budget
 
         # Determine collection rates
         global_cr = self.model.predict(np.array([np.sum(_dev), self._collection_rate]).reshape(1, -1))[0]
         local_cr = self.model.predict(np.array([np.sum(_dev), budget_left]).reshape(1, -1))[0]
-        # collection_rate = (alpha * global_cr) + (beta * budget_left)
-        collection_rate = (ALPHA * global_cr) + (BETA * budget_left)
-        # collection_rate = (alpha * global_cr) + (beta * local_cr)
-        # collection_rate = (alpha * global_cr) + (beta * (ALPHA*local_cr + BETA*budget_left))
+        collection_rate = (alpha * global_cr) + (beta * budget_left)
 
         # Set collection rate to 1 when there is surplus in budget 
         if budget_left >= 1:
@@ -171,10 +151,7 @@ class AdaptiveGambler(AdaptiveLiteSense):
 
         # Fit default uniform policy
         target_samples = int(collection_rate * self._window_size)
-
         skip = 1 if collection_rate == 0 else max(1.0 / collection_rate, 1)
-        frac_part = skip - math.floor(skip)
-
         self._skip_indices: List[int] = []
 
         index = 0
@@ -185,19 +162,14 @@ class AdaptiveGambler(AdaptiveLiteSense):
                 index += 1
             else:
                 index += int(math.ceil(skip))
-                # r = self._rand.uniform()
-                # if r > frac_part:
-                #     index += int(math.floor(skip))
-                # else:
-                #     index += int(math.ceil(skip))
 
         self._skip_idx = 0
         self._window_idx = 0
         self._skip_indices = self._skip_indices[:target_samples]
     
         # Reset parameters
-        self._moving_dev = 0
-        self._dev_count = 0
+        self._avg_dev = []
+        self._avg_mean = []
 
 
     def collect(self, measurement: np.ndarray):
@@ -205,10 +177,8 @@ class AdaptiveGambler(AdaptiveLiteSense):
         self.dev = (1.0 - self._beta) * self.dev + self._beta * np.abs(self.mean - measurement)
         
         # Update policy parameters
-        self._moving_dev += self.dev
-        self._moving_mean += self.mean
-        self._dev_count += 1
-        self._mean_count += 1
+        self._avg_dev.append(self.dev)
+        self._avg_mean.append(self.mean)
 
         self._samples_collected += 1
 

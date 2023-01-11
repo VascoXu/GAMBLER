@@ -52,7 +52,6 @@ class AdaptiveBudget(AdaptiveLiteSense):
         self._skip_indices: List[int] = []
         self._adaptive = True
 
-
         self._prev_total_samples = self._total_samples
         self._prev_budget = self._budget
 
@@ -111,7 +110,7 @@ class AdaptiveBudget(AdaptiveLiteSense):
         self._prev_budget = self._samples_collected
         self._prev_total_samples = leftover
 
-        if self._samples_seen >= self._budget_cutoff and self._adaptive:
+        if self._samples_collected >= self._budget_cutoff and self._adaptive:
             self._count = 0
             self._adaptive = False
 

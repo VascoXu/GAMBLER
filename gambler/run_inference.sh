@@ -1,9 +1,0 @@
-python3 learning/inference.py --dataset epilepsy --num-runs 100 > epilepsy_inf.txt &
-python3 learning/inference.py --dataset uci_har --num-runs 100 > uci_har_inf.txt &
-python3 learning/inference.py --dataset wisdm --num-runs 100 > wisdm_inf.txt &
-python3 learning/inference.py --dataset trajectories --num-runs 100 > trajectories_inf.txt &
-python3 learning/inference.py --dataset pedestrian --num-runs 100 > pedestrian_inf.txt &
-python3 learning/inference.py --dataset temperature --num-runs 100 > temperature_inf.txt &
-python3 learning/inference.py --dataset pavement --num-runs 100 > pavement_inf.txt &
-python3 learning/inference.py --dataset haptics --num-runs 100 > haptics_inf.txt &
-python3 learning/inference.py --dataset eog --num-runs 100 > eog_inf.txt &

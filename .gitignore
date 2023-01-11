@@ -1,5 +1,3 @@
-datasets/
-
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -129,3 +127,13 @@ dmypy.json
 
 # Pyre type checker
 .pyre/
+
+# Custom
+datasets/
+raw_datasets/
+phone_accel/
+results/
+test/
+train/
+saved_models/
+thinking.md

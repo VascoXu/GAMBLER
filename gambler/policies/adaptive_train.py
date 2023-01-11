@@ -12,7 +12,6 @@ from gambler.utils.constants import ALPHA, P
 from gambler.utils.controller import Controller
 from gambler.utils.action import Action
 from gambler.utils.distribution import load_distribution
-from gambler.utils.measurements import translate_measurement
 
 
 class AdaptiveTrain(AdaptiveLiteSense):
@@ -48,41 +47,30 @@ class AdaptiveTrain(AdaptiveLiteSense):
         self._dataset = dataset
         
         # Policy parameters
-        self._moving_dev = 0
-        self._moving_mean = 0
-        self._dev_count = 0
-        self._mean_count = 0
-
-        self._training = []
-        self._count = 0
+        self._average_dev: List[float] = []
+        self._training_data: List[List[float]] = []
     
-        self.mean = 0
-        self.dev = 0
-
     @property
     def policy_type(self) -> PolicyType:
         return PolicyType.ADAPTIVE_TRAIN
 
     @property
-    def training(self):
-        return self._training
+    def training_data(self):
+        return self._training_data
 
 
     def update(self, collection_ratio: float, seq_idx: int, window: tuple):
-        # Check if budget was reached
-        if self._dev_count == 0:
+        # Ensure budget was not exhausted
+        if len(self._average_dev) == 0:
             return
+          
+        dev = sum(self._average_dev)/len(self._average_dev)
 
-        # Update estimate mean reward            
-        _dev = self._moving_dev / self._dev_count
-        _mean = self._moving_mean / self._mean_count
-
-        # Write to training data
-        self._training.append([np.sum(_dev), self._collection_rate, collection_ratio])
+        # Hold training data
+        self._training_data.append([np.sum(dev), self._collection_rate, collection_ratio])
         
         # Reset parameters
-        self._moving_dev = 0
-        self._dev_count = 0
+        self._average_dev: List[float] = []
 
 
     def collect(self, measurement: np.ndarray):
@@ -90,14 +78,9 @@ class AdaptiveTrain(AdaptiveLiteSense):
         self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
 
         # Update policy parameters
-        self._moving_dev += self._dev
-        self._moving_mean += self._mean
-        self._dev_count += 1
-        self._mean_count += 1
+        self._average_dev.append(self._dev)
 
-        # Should collect
         norm = np.sum(self._dev)
-
         if norm > self._threshold:
             self._current_skip = max(int(self._current_skip / 2), self.min_skip)
         else:
@@ -109,4 +92,4 @@ class AdaptiveTrain(AdaptiveLiteSense):
 
     def reset(self):
         super().reset()
-        self._training = []
+        self._training_data: List[List[float]] = []
