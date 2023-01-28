@@ -1,0 +1,11 @@
+{
+    "files.associations": {
+        "stdint.h": "c",
+        "policy.h": "c",
+        "decision_tree.h": "c",
+        "fixed_point.h": "c",
+        "main.h": "c",
+        "stdio.h": "c",
+        "inference_tests.h": "c"
+    }
+}

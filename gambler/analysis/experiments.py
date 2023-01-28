@@ -45,8 +45,6 @@ if __name__ == '__main__':
         'adaptive_heuristic',
         'adaptive_deviation',
         'adaptive_uniform',
-        'adaptive_budget',
-        'adaptive_prob',
         'adaptive_gambler',
     ]
 
@@ -56,7 +54,7 @@ if __name__ == '__main__':
         'wisdm': 20,
         'trajectories': 50,
         'pedestrian': 20, 
-        'temperature': 20,
+        'temperature': 40,
         'pavement': 30, 
         'haptics': 5,
         'eog': 50
@@ -122,6 +120,7 @@ if __name__ == '__main__':
             for policy_name in policies:
                 # Make the policy
                 collect_mode = 'tiny'
+                window_size = window_sizes[dataset] if policy_name == 'adaptive_gambler' else 20
                 policy = BudgetWrappedPolicy(name=policy_name,
                                             num_seq=num_seqs,
                                             seq_length=seq_length,
@@ -129,7 +128,7 @@ if __name__ == '__main__':
                                             dataset=dataset,
                                             collection_rate=budget,
                                             collect_mode=collect_mode,
-                                            window_size=window_sizes[dataset],
+                                            window_size=window_size,
                                             model='',
                                             max_skip=0)
 

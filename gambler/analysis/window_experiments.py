@@ -47,8 +47,8 @@ if __name__ == '__main__':
     NUM_RUNS = len(budgets) if args.randomize == 'expected' else args.num_runs
 
     output_file = os.path.join('results', f'window_sizes_experiment_{args.randomize}.json.gz')
-    # results_dict = read_json_gz(output_file) if os.path.exists(output_file) else dict()
-    results_dict = dict()
+    results_dict = read_json_gz(output_file) if os.path.exists(output_file) else dict()
+    # results_dict = dict()
 
     # Build dictionary to hold results
     for dataset in args.datasets:
@@ -59,7 +59,7 @@ if __name__ == '__main__':
 
     for dataset in args.datasets:
         # Load dataset
-        fold = 'train'
+        fold = 'validation'
         true_inputs, true_labels = load_data(dataset_name=dataset, fold=fold)
         unique_labels = list(set(true_labels))
         num_seq = len(true_inputs)

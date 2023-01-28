@@ -14,7 +14,6 @@ policies = {'uniform': 'Uniform',
             'adaptive_heuristic': 'Adaptive Heuristic',
             'adaptive_deviation': 'Adaptive Deviation',
             'adaptive_uniform': 'Adaptive Uniform',
-            'adaptive_budget': 'Adaptive Budget',
             'adaptive_gambler': 'Adaptive Gambler',
             }
 
@@ -68,7 +67,7 @@ if __name__ == '__main__':
     parser.add_argument('--normalized', action='store_true')
     args = parser.parse_args()
     
-    NUM_K = 4
+    NUM_K = 5
 
     k_diffs = dict()
     for policy in policies.keys():
@@ -93,8 +92,8 @@ if __name__ == '__main__':
         ax.axvline((xs[-2] + xs[-1]) / 2, color='k', linestyle='--', linewidth=1)
         ax.axhline(0, color='k', linewidth=1)
         
-        plt.ylabel('Error Reduction Compared to Uniform Sampling (%)', fontsize=16)
-        plt.xlabel('Randomization Parameter', fontsize=16)
+        plt.ylabel('Error Reduction Compared to Uniform Sampling (%)', fontsize=18)
+        plt.xlabel('Randomization Parameter', fontsize=18)
         plt.xticks(range(len(ks)), ks, fontsize=AXIS_FONT)
         plt.title(f'Reconstruction Error across Multiple Random Distributions', fontsize=TITLE_FONT)
         fig.tight_layout()

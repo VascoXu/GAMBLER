@@ -28,7 +28,6 @@ def get_data(classes, inputs, labels):
             label = labels[seq_idx]
 
             # if # TODO: fix for when data is one large sequence
-
             _inputs.append(np.asarray(seq))
             _labels.append(np.asarray(label))
 

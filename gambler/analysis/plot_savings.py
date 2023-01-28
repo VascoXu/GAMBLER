@@ -7,18 +7,28 @@ import matplotlib.pyplot as plt
 from collections import Counter
 from statistics import geometric_mean
 
+from gambler.utils.constants import DATASETS
 from gambler.utils.file_utils import iterate_dir, read_json, save_json_gz, read_json_gz
 from gambler.analysis.plot_utils import bar_plot, COLORS, PLOT_STYLE, PLOT_SIZE, AXIS_FONT, TITLE_FONT, LEGEND_FONT, LINE_WIDTH
 
 policies = {'uniform': 'Uniform',
             'adaptive_heuristic': 'Adaptive Heuristic',
             'adaptive_deviation': 'Adaptive Deviation',
-            'adaptive_budget': 'Adaptive Budget',
             'adaptive_gambler': 'Adaptive Gambler',
             }
 
-policies = {'adaptive_gambler': 'Adaptive Gambler'}
-# policies = {'adaptive_deviation': 'Adaptive Deviation'}
+
+def load_savings(distribution):
+    dataset_results = dict()
+
+    for dataset in DATASETS:
+        # Load the results
+        base = os.path.dirname(__file__)
+        filepath = os.path.join(base, '../results/budget_savings', f'budget_savings_{args.distribution}_{dataset}.json.gz')
+        results = read_json_gz(filepath)
+        dataset_results[dataset] = results[dataset]
+
+    return dataset_results
 
 
 if __name__ == '__main__':
@@ -26,11 +36,9 @@ if __name__ == '__main__':
     parser.add_argument('--normalized', action='store_true')
     parser.add_argument('--distribution', type=str, default='expected')
     args = parser.parse_args()
-
-    # Load the results
-    base = os.path.dirname(__file__)
-    filepath = os.path.join(base, '../results', f'savings_{args.distribution}.json.gz')
-    dataset_results = read_json_gz(filepath)
+    
+    # Load budget reduction data
+    dataset_results = load_savings(args.distribution)
 
     # Compute mean error of each dataset
     mean_savings = dict()
@@ -38,20 +46,19 @@ if __name__ == '__main__':
         mean_savings[policy] = []
 
     for dataset in dataset_results.keys():
-        uniform_savings = [error[1] for error in dataset_results[dataset]['uniform']]
-        uniform_mean = geometric_mean(uniform_savings)
+        gambler_savings = [error[1] for error in dataset_results[dataset]['adaptive_gambler']]
+        gambler_mean = geometric_mean(gambler_savings)
 
         for policy in policies.keys():
             savings = [error[1] for error in dataset_results[dataset][policy]]
-            print(policy, savings)
 
             # compute policy average
             # policy_mean = sum(savings)/len(savings)
             policy_mean = geometric_mean(savings)
             
             # compute percentage decrease
-            mean_diff = uniform_mean-policy_mean
-            pct_dec = (mean_diff/uniform_mean)*100
+            mean_diff = gambler_mean-policy_mean
+            pct_dec = (mean_diff/gambler_mean)*100
 
             # normalize savings to uniform
             # normalized_mean = policy_mean/uniform_mean

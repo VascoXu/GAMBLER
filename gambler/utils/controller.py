@@ -1,6 +1,3 @@
-from gambler.utils.constants import ALPHA, P
-
-
 class Controller:
     def __init__(self, 
                  alpha: float,

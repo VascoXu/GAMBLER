@@ -30,7 +30,12 @@ class UniformPolicy(Policy):
         self._window_size = window_size
         self._window_idx = 0
 
-        target_samples = int(collection_rate * self._window_size)
+        if num_seq == 1:
+            target_samples = int(collection_rate * window_size)
+            iter_size = window_size
+        else:
+            target_samples = int(collection_rate * seq_length)
+            iter_size = seq_length
 
         skip = max(1.0 / collection_rate, 1)
         frac_part = skip - math.floor(skip)
@@ -38,9 +43,9 @@ class UniformPolicy(Policy):
         self._skip_indices: List[int] = []
 
         index = 0
-        while index < window_size:
+        while index < iter_size:
             self._skip_indices.append(index)
-            if (target_samples - len(self._skip_indices)) == (window_size - index - 1):
+            if (target_samples - len(self._skip_indices)) == (iter_size - index - 1):
                 index += 1
             else:
                 r = self._rand.uniform()
@@ -59,6 +64,7 @@ class UniformPolicy(Policy):
     @property
     def window_size(self) -> int:
         return self._window_size
+
 
     def update(self, collection_ratio: float, seq_idx: int, window: tuple):
         self._window_idx = 0

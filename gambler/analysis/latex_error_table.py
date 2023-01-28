@@ -14,7 +14,6 @@ policies = {'uniform': 'Uniform',
             'adaptive_heuristic': 'Adaptive Heuristic',
             'adaptive_deviation': 'Adaptive Deviation',
             'adaptive_uniform': 'Adaptive Uniform',
-            'adaptive_budget': 'Adaptive Budget',
             'adaptive_gambler': 'Adaptive Gambler',
             }
 
@@ -73,6 +72,7 @@ if __name__ == '__main__':
 
     # Print for LATEX table
     for dataset in dataset_results.keys():
+        print(dataset)
         errors = [str(error) for error in mean_errors[dataset]] 
         print(' & '.join(errors))
     print(' & '.join(diffs))

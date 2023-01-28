@@ -270,8 +270,10 @@ if __name__ == '__main__':
     val_indices = np.arange(val_inputs.shape[0])
     rand = np.random.RandomState(seed=3485)
 
-    if len(args.collection_rates) < 0:
-        collection_rates = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+
+    if not args.collection_rates:
+        # collection_rates = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        collection_rates = [rate/100 for rate in range(0, 100, 5)][4:]
     else:
         collection_rates = args.collection_rates
 
@@ -347,4 +349,4 @@ if __name__ == '__main__':
     # print(threshold_map)
 
     # Save the results
-    save_json_gz(threshold_map, output_file)
+    # save_json_gz(threshold_map, output_file)

@@ -16,7 +16,6 @@ from typing import Tuple, List, Dict, Any, Optional
 
 from gambler.utils.data_types import PolicyType, PolicyResult, CollectMode
 from gambler.policies.adaptive_litesense import AdaptiveLiteSense
-from gambler.utils.constants import ALPHA, P
 from gambler.utils.controller import Controller
 from gambler.utils.action import Action
 from gambler.utils.distribution import load_distribution

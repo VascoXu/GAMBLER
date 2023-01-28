@@ -23,12 +23,10 @@ def load_data(dataset_name: str, fold: str, filename: str='') -> Tuple[np.ndarra
     with h5py.File(data_file, 'r') as fin:
         inputs = fin['inputs'][:]
         output = fin['output'][:]
-        
-    if dataset_name == 'temperature':
-        inputs = np.reshape(inputs, (inputs.shape[0], 1, 1))
-    elif len(inputs.shape) == 2:
-        inputs = np.expand_dims(inputs, axis=-1)  # [N, T, 1]
 
+    if len(inputs.shape) == 2:
+        inputs = np.expand_dims(inputs, axis=-1)  # [N, T, 1]        
+        
     output = output.reshape(-1).astype(int)
 
     return inputs, output

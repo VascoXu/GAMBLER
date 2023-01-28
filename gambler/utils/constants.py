@@ -25,5 +25,24 @@ ENCODING = ['standard', 'group', 'group_unshifted', 'single_group', 'padded', 'p
 ENCRYPTION = ['stream', 'block']
 COLLECTION = ['tiny', 'low', 'med', 'high']
 
-ALPHA = 0.7763596500794185
-P = 0
+WINDOW_SIZES = {
+    'epilepsy': 10,
+    'uci_har': 50, 
+    'wisdm': 20,
+    'trajectories': 50,
+    'pedestrian': 20, 
+    'pavement': 30, 
+    'haptics': 5,
+    'eog': 50
+}
+
+DATASETS = [
+    'epilepsy',
+    'uci_har',
+    'wisdm',
+    'trajectories',
+    'pedestrian',
+    'pavement',
+    'haptics',
+    'eog'
+]

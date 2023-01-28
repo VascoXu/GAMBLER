@@ -7,8 +7,8 @@ LINE_WIDTH = 2
 MARKER_SIZE = 8
 ANNOTATE_FONT = 14
 LEGEND_FONT = 12
-AXIS_FONT = 14
-TITLE_FONT = 16
+AXIS_FONT = 16
+TITLE_FONT = 18
 PLOT_SIZE = (12, 6)
 
 COLORS = {
@@ -16,8 +16,6 @@ COLORS = {
     'adaptive_heuristic': '#fc8d59',
     'adaptive_deviation': '#c2a5cf',
     'adaptive_uniform': '#9ecae1', 
-    'adaptive_budget': '#a4d466',
-    'adaptive_prob': '#dfc27d', 
     'adaptive_gambler': '#d73027',
 }
 
@@ -98,7 +96,7 @@ def bar_plot(ax, data, error={}, colors=None, total_width=0.8, single_width=1.0,
 
     # Draw legend if we need
     if legend:
-        ax.legend(bars, legend, loc=1)
+        ax.legend(bars, legend, loc=2)
 
     # Draw values on top of bar
     for bar in all_bars:

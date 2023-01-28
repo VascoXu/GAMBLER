@@ -15,7 +15,7 @@ from gambler.policies.budget_wrapped_policy import BudgetWrappedPolicy
 from gambler.utils.misc_utils import flatten
 
 
-def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce_budget: bool) -> PolicyResult:
+def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce_budget: bool, reconstruct: bool=False) -> PolicyResult:
     """
     Executes the policy on the given sequence.
     Args:
@@ -41,6 +41,8 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce
     # Unpack collection information
     window_cnt = 0
     window_num = 0
+
+    error = 1
 
     # Lists to hold the results
     measurement_list: List[np.ndarray] = []
@@ -87,30 +89,31 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce
             policy.step(seq_idx=0, count=collected_within_window)
 
             # Reconstruct the sequence
-            if collected_within_window == 0:
-                reconstructed = np.zeros([policy.window_size, num_features])
-            else:
-                # Stack collected features into a numpy array
-                collected = np.vstack(measurement_list) # [K, D]
-                reconstructed = reconstruct_sequence(measurements=collected,
-                                                    collected_indices=window_idx,
-                                                    seq_length=window_cnt)
-                estimate_list.append(reconstructed)
+            if reconstruct:
+                if collected_within_window == 0:
+                    reconstructed = np.zeros([policy.window_size, num_features])
+                else:
+                    # Stack collected features into a numpy array
+                    collected = np.vstack(measurement_list) # [K, D]
+                    reconstructed = reconstruct_sequence(measurements=collected,
+                                                        collected_indices=window_idx,
+                                                        seq_length=window_cnt)
+                    estimate_list.append(reconstructed)
 
-            # Compute reconstruction error for window
-            left = window_num*policy.window_size
-            right = left+policy.window_size 
-            true = sequence[left:right] if seq_idx < seq_length-1 else sequence[left:]
+                # Compute reconstruction error for window
+                left = window_num*policy.window_size
+                right = left+policy.window_size 
+                true = sequence[left:right] if seq_idx < seq_length-1 else sequence[left:]
 
-            if collected_within_window <= 0:
-                error = 1
-            else:
-                error = mean_absolute_error(y_true=true, y_pred=reconstructed)
+                if collected_within_window <= 0:
+                    error = 1
+                else:
+                    error = mean_absolute_error(y_true=true, y_pred=reconstructed)
 
             # Record the policy results
             errors.append(error)
-            collected_indices.append(collected_idx)
             window_indices.append(window_idx)
+            collected_indices.append(collected_idx)
 
             # Reset window parameters
             window_cnt = 0

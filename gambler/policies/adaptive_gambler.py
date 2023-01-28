@@ -16,7 +16,6 @@ from typing import Tuple, List, Dict, Any, Optional
 
 from gambler.utils.data_types import PolicyType, PolicyResult, CollectMode
 from gambler.policies.adaptive_litesense import AdaptiveLiteSense
-from gambler.utils.constants import ALPHA, P
 from gambler.utils.controller import Controller
 from gambler.utils.action import Action
 from gambler.utils.distribution import load_distribution
@@ -185,4 +184,14 @@ class AdaptiveGambler(AdaptiveLiteSense):
 
     def reset(self):
         super().reset()
+        
+        self._avg_dev: List[float] = []
+        self._avg_mean: List[float] = []
+        self.mean = 0
+        self.dev = 0
+
+        self._samples_collected = 0
+        self._total_samples = self._seq_length        
+
         self._skip_idx = 0
+        self._window_idx = 0

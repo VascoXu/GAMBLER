@@ -48,16 +48,28 @@ class BudgetWrappedPolicy(Policy):
                          collect_mode=self._policy.collect_mode,
                          collection_rate=collection_rate,)
 
+        self._name = name
+
         # Counters for tracking the energy consumption
         self._num_sequences: Optional[int] = None
         self._consumed_energy = 0.0
         self._num_collected = 0
         self._total_samples = 0
-        self._budget = seq_length*collection_rate if 'budget' not in kwargs else kwargs['budget']
+
+        if 'budget' in kwargs:
+            self._budget = kwargs['budget']
+        if num_seq == 1:
+            self._budget = seq_length*collection_rate
+        else:
+            self._budget = num_seq*seq_length*collection_rate
 
     @property
     def policy_type(self) -> PolicyType:
         return self._policy.policy_type
+
+    @property
+    def policy_name(self) -> str:
+        return self._name
 
     @property
     def window_size(self) -> int:
@@ -78,6 +90,9 @@ class BudgetWrappedPolicy(Policy):
 
     def set_threshold(self, threshold: float):
         self._policy.set_threshold(threshold)
+
+    def set_budget(self, budget: int):
+        self._budget = budget
 
     def update(self, collection_ratio: float, seq_idx: int, window: tuple):
         self._policy.update(collection_ratio, seq_idx, window)
@@ -102,6 +117,7 @@ class BudgetWrappedPolicy(Policy):
     def init_for_experiment(self, num_sequences: int):
         self._num_sequences = num_sequences
         self._num_collected = 0
+        self._total_samples = 0
 
     def get_random_sequence(self) -> np.ndarray:
         rand_list: List[np.ndarray] = []
@@ -217,12 +233,6 @@ def make_policy(name: str,
             cls = AdaptiveBudget
         elif name == 'adaptive_gambler':
             cls = AdaptiveGambler
-        elif name == 'adaptive_gamblerv2':
-            cls = AdaptiveGamblerV2
-        elif name == 'adaptive_gamblerv3':
-            cls = AdaptiveGamblerV3
-        elif name == 'adaptive_gamblerv4':
-            cls = AdaptiveGamblerV4               
         elif name == 'adaptive_prob':
             cls = AdaptiveProb
         elif name == 'adaptive_train':

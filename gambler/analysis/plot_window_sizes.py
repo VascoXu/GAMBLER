@@ -27,7 +27,8 @@ if __name__ == '__main__':
         axs = axs.ravel()
         plt.subplots_adjust(hspace=0.5)
 
-        for i, dataset in enumerate(results.keys()):
+        for i, dataset in enumerate(list(results.keys())[1:]):
+            
             avg_errors = []
             for window_size in results[dataset]:
                 errors = [error[1] for error in results[dataset][window_size]]
@@ -42,5 +43,5 @@ if __name__ == '__main__':
         
         fig.suptitle(f'{args.distribution.capitalize()}: Window Size vs Reconstruction Error', fontsize=16)
         fig.tight_layout()
-        plt.savefig(f'graphs/window_size_{args.distribution}.png', bbox_inches='tight')
+        # plt.savefig(f'graphs/window_size_{args.distribution}.png', bbox_inches='tight')
         plt.show()

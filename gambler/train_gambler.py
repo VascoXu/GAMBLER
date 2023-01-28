@@ -31,7 +31,7 @@ from gambler.utils.misc_utils import flatten
 
 
 def train_gambler(dataset, window_size, fold):
-   # List of collection rates
+    # List of collection rates
     collection_rates = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
     
     # Load the data

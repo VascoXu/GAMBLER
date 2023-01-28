@@ -14,8 +14,6 @@ policies = {'uniform': 'Uniform',
             'adaptive_heuristic': 'Adaptive Heuristic',
             'adaptive_deviation': 'Adaptive Deviation',
             'adaptive_uniform': 'Adaptive Uniform',
-            'adaptive_budget': 'Adaptive Budget',
-            'adaptive_prob': 'Adaptive Prob',
             'adaptive_gambler': 'Adaptive Gambler',
             }
 
@@ -24,13 +22,13 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--normalized', action='store_true')
     parser.add_argument('--distribution', type=str, default='expected')
+    parser.add_argument('--dist-num', type=int, default=1)
     args = parser.parse_args()
 
     # Load the results
-    dist_num = 3
+    dist_num = args.dist_num
     base = os.path.dirname(__file__)
     filepath = os.path.join(base, '../results', f'{args.distribution}_distribution_{dist_num}.json.gz')
-    windowpath = os.path.join(base, '../results', f'window_sizes_experiment_{args.distribution}.json.gz')
     dataset_results = read_json_gz(filepath)
 
     # Compute mean error of each dataset
@@ -72,14 +70,16 @@ if __name__ == '__main__':
     with plt.style.context(PLOT_STYLE):
         fig, ax = plt.subplots(figsize=(12, 8))
 
+        colors = [COLORS[policy] for policy in policies.keys()]
+
         xs = bar_plot(ax, mean_errors, error=mean_std, total_width=.8, single_width=1, colors=list(COLORS.values()), legend=legend)
 
         ax.axvline((xs[-2] + xs[-1]) / 2, color='k', linestyle='--', linewidth=1)
         ax.axhline(0, color='k', linewidth=1)
         
-        plt.ylabel('MAE (Normalized to Uniform)', fontsize=16)
-        plt.xlabel('Datasets', fontsize=16)
+        plt.ylabel('MAE (Normalized to Uniform)', fontsize=18)
+        plt.xlabel('Datasets', fontsize=18)
         plt.xticks(range(len(datasets)), datasets, fontsize=AXIS_FONT)
-        plt.title(f'Reconstruction Error across Multiple Datasets (Distribution: {dist} [k={dist_num}])', fontsize=TITLE_FONT)
+        plt.title(f'Reconstruction Error across Multiple Datasets (Distribution: {dist})', fontsize=TITLE_FONT)
         fig.tight_layout()
         plt.show()

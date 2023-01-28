@@ -38,6 +38,15 @@ def write_dataset(inputs, labels, filename, output_folder):
         output_dataset.write_direct(partition_output)
 
 
+def merge_sequence(sequence):
+    # Merge feature dimensions
+    merged = np.zeros((sequence.shape[0], 1))
+    for i, sample in enumerate(sequence):
+        x, y, z = sample
+        merged[i] = ((x**2 + y**2 + z**2)**0.5)
+    return merged
+
+
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--dataset', type=str, required=True)
@@ -61,14 +70,23 @@ if __name__ == '__main__':
     random.seed(42)
     
     # Load the data
-    input_seqs, labels = load_data(dataset_name=args.dataset, fold=args.fold)
+    if args.dataset.startswith('phone_accel'):
+        if args.dataset != 'phone_accel':
+            test_dataset = args.dataset.split('_')[2]
+        else:
+            test_dataset = 'phone_accel'
+            
+        args.dataset = 'phone_accel'
+    else:
+        test_dataset = args.dataset
+
+    input_seqs, labels = load_data(dataset_name=test_dataset, fold=args.fold)
     labels = labels.reshape(-1)
 
     # Rearrange data for experiments
     inputs, labels = get_data(args.classes, input_seqs, labels)
 
     # Unpack the shape
-    # num_seqs, seq_lengths, num_features = input_seqs.shape
     num_seqs, seq_lengths, num_features = inputs.shape
 
     # Merge sequences into continous stream
@@ -109,6 +127,7 @@ if __name__ == '__main__':
     # Run the policy
     policy_result = run_policy(policy=policy,
                                 sequence=inputs,
+                                reconstruct=True,
                                 should_enforce_budget=True)
 
     collected_list = policy_result.measurements
@@ -201,7 +220,7 @@ if __name__ == '__main__':
 
     elif args.reconstruction_plot == 'sequence':
         # Plot sequence reconstruction
-        data_idx = 2
+        data_idx = 100
         left = data_idx*num_seqs
         right = left+seq_lengths
 
@@ -213,20 +232,23 @@ if __name__ == '__main__':
 
     elif args.reconstruction_plot == 'all':
         # Plot reconstruction for all data
+        # true_inputs = merge_sequence(inputs)
         true_inputs = inputs
+        # estimates = merge_sequence(reconstructed)
         estimates = reconstructed
         collected_idx = collected_indices
 
-    print('Max Error: {0:.5f} (Idx: {1})'.format(errors[data_idx], data_idx))
-    print('Max Error Collected: {0}'.format(len(collected_idx)))
+    # print('Max Error: {0:.5f} (Idx: {1})'.format(errors[data_idx], data_idx))
+    # print('Max Error Collected: {0}'.format(len(collected_idx)))
 
     with plt.style.context('seaborn-ticks'):
         fig, ax1 = plt.subplots()
 
         # xs = list(range(args.window_size))
         xs = list(range(len(reconstructed)))
+        xs = list(range(len(true_inputs)))
         ax1.plot(xs, true_inputs[:, args.feature], label='True', color='royalblue')
-        ax1.plot(xs, reconstructed[:, args.feature], label='Inferred', color='orange')
+        ax1.plot(xs, estimates[:, args.feature], label='Inferred', color='orange')
         # ax1.scatter(collected_idx, estimates[collected_idx, args.feature], marker='o', color='orange')
 
         ax1.set_xlabel('Time Step')
