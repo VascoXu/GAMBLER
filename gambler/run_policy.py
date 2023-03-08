@@ -98,7 +98,7 @@ if __name__ == '__main__':
     # Make the policy
     collect_mode = 'tiny'
     policy = BudgetWrappedPolicy(name=args.policy,
-                                 num_seq=num_seqs,
+                                 num_seq=1,
                                  seq_length=seq_length,
                                  num_features=num_features,
                                  dataset=args.dataset,
@@ -220,7 +220,7 @@ if __name__ == '__main__':
 
     elif args.reconstruction_plot == 'sequence':
         # Plot sequence reconstruction
-        data_idx = 100
+        data_idx = 2
         left = data_idx*num_seqs
         right = left+seq_lengths
 

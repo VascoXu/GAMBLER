@@ -9,6 +9,8 @@ import os
 from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
+from gambler.utils.data_utils import reconstruct_sequence
+from sklearn.metrics import mean_absolute_error, r2_score, mean_squared_error
 
 from collections import deque, OrderedDict
 from enum import Enum, auto
@@ -23,7 +25,7 @@ from gambler.utils.file_utils import read_pickle_gz, save_json_gz, save_pickle_g
 from gambler.utils.loading import load_data
 
 
-class AdaptiveGambler(AdaptiveLiteSense):
+class AdaptiveShadow(AdaptiveLiteSense):
 
     def __init__(self,
                  collection_rate: float,
@@ -63,6 +65,14 @@ class AdaptiveGambler(AdaptiveLiteSense):
         self._avg_mean: List[float] = []
         self.mean = 0
         self.dev = 0
+
+        self._shadow_mode = False
+        self._shadow_compensate = False
+        self._shadow_error = False
+        # self._target_error = 0.07554 # 0.7
+        self._target_error = 0.12632
+        self._gambler_rate = collection_rate
+        self._bias = 1
 
         # Budget parameters
         self._samples_collected = 0
@@ -142,11 +152,90 @@ class AdaptiveGambler(AdaptiveLiteSense):
         # Determine collection rates
         global_cr = self.model.predict(np.array([np.sum(_dev), self._collection_rate]).reshape(1, -1))[0]
         local_cr = self.model.predict(np.array([np.sum(_dev), budget_left]).reshape(1, -1))[0]
-        collection_rate = (alpha * global_cr) + (beta * budget_left)
+        collection_rate = global_cr    
 
         # Set collection rate to 1 when there is surplus in budget 
         if budget_left >= 1:
             collection_rate = 1.0
+
+        if self._shadow_mode and (self._samples_collected < self._budget):
+            # Shadow mode
+            should_decrease = False
+            if self._gambler_rate > self._collection_rate:
+                # Gambler collected more than Uniform
+                print("Want to collect more")
+                # print("Collected more", len(measurements), int(self._window_size*self._collection_rate))
+                indices = np.round(np.linspace(0, len(measurements)-1, int(self._window_size*self._collection_rate))).astype(int).tolist()
+
+                # Decrease the collection rate if error is too high
+                should_decrease = True
+
+            elif self._gambler_rate < self._collection_rate:
+                # Gambler wanted to collect less than Uniform
+                print("Want to collect less")
+                # print("Collected less", len(measurements), int(self._window_size*self._gambler_rate))
+                indices = np.round(np.linspace(0, len(measurements)-1, int(self._window_size*self._gambler_rate))).astype(int).tolist()
+                # Increase the collection rate if the error is too high 
+
+            # Subsample based on the rate
+            try:
+                subsamples = np.vstack([measurements[i] for i in indices])
+            except:
+                print(indices, self._gambler_rate, self._samples_collected, self._budget)
+        
+            # Reconstruct the sequence
+            reconstructed = reconstruct_sequence(measurements=subsamples,
+                                                collected_indices=indices,
+                                                seq_length=len(measurements))
+
+            # Compute error 
+            error = mean_absolute_error(y_true=np.vstack(measurements), y_pred=reconstructed)
+            self._shadow_error = (1.0 - self._alpha) * self._shadow_error + self._alpha * error
+
+            # Adjust collection rate based on error
+            self._bias = self._gambler_rate/self._collection_rate 
+            # self._bias = self._collection_rate/self._gambler_rate
+
+            b4_bias = collection_rate
+
+            if self._shadow_error < self._target_error:
+                # Decrease the bias (INCREASE collection rate)
+                collection_rate += 0.2
+            elif self._shadow_error > self._target_error:
+                # Increase the bias (DECREASE collection rate)
+                collection_rate -= 0.2
+
+            self._shadow_compensate = True
+
+            print("Error ", error, " Shadow Error: ", self._shadow_error)
+            # print("BIAS ", self._bias, " BEFORE BIAS: ", b4_bias, " after bias: ", collection_rate)
+
+            # Reset 'shadow mode'
+            self._shadow_mode = False
+
+        # Bound the collection rate
+        collection_rate = max(min(1.0, collection_rate), 0.2)
+
+        # Run in 'shadow mode'
+        prob = self._rand.uniform(0, 1)
+        if prob >= 0.7 and not self._shadow_compensate:
+            self._gambler_rate = collection_rate
+
+            if self._collection_rate != collection_rate:
+                self._shadow_mode = True
+
+            print('Initializing Shadow Mode')
+
+            # Need a way to map (error -> collection rate)
+
+            if collection_rate > self._collection_rate:
+                # Gambler wants to collect more than Uniform
+                pass
+            elif collection_rate < self._collection_rate:
+                # Gambler wants to collect less than Uniform (collect at Uniform rate, to be subsampled later)
+                collection_rate = self._collection_rate    
+
+        self._shadow_compensate = False
 
         # Fit default uniform policy
         target_samples = int(collection_rate * self._window_size)
@@ -165,7 +254,7 @@ class AdaptiveGambler(AdaptiveLiteSense):
         self._skip_idx = 0
         self._window_idx = 0
         self._skip_indices = self._skip_indices[:target_samples]
-    
+
         # Reset parameters
         self._avg_dev = []
         self._avg_mean = []

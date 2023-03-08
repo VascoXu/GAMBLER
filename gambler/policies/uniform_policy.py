@@ -26,9 +26,21 @@ class UniformPolicy(Policy):
                          seq_length=seq_length,
                          collect_mode=collect_mode,
                          )
+        # =======================
+        # For tracking deviation
+        self._alpha = 0.7
+        self._beta = 0.7
+
+        self._mean = np.zeros(shape=(num_features, ))  # [D]
+        self._dev = np.zeros(shape=(num_features, ))
+
         self._dataset = dataset
         self._window_size = window_size
         self._window_idx = 0
+
+        self._average_dev: List[float] = []
+        self._training_data: List[List[float]] = []
+        # =======================
 
         if num_seq == 1:
             target_samples = int(collection_rate * window_size)
@@ -61,14 +73,35 @@ class UniformPolicy(Policy):
     def policy_type(self) -> PolicyType:
         return PolicyType.UNIFORM
 
+
     @property
     def window_size(self) -> int:
         return self._window_size
 
+    @property
+    def training_data(self):
+        return self._training_data
 
-    def update(self, collection_ratio: float, seq_idx: int, window: tuple):
+    @property
+    def deviation(self):
+        return np.sum(self._dev)
+
+
+    def update(self, collection_ratio: float, seq_idx: int, window: tuple, measurements: List[np.ndarray]):
         self._window_idx = 0
         self._skip_idx = 0
+
+        # Ensure budget was not exhausted
+        if len(self._average_dev) == 0:
+            return
+
+        dev = sum(self._average_dev)/len(self._average_dev)
+
+        # Hold training data
+        self._training_data.append([np.sum(self._dev), self._collection_rate, collection_ratio])
+        
+        # Reset parameters
+        self._average_dev: List[float] = []
 
 
     def should_collect(self, seq_idx: int, window: tuple) -> bool:
@@ -80,6 +113,16 @@ class UniformPolicy(Policy):
         return False
         
 
+    def collect(self, measurement: np.ndarray):
+        # Track deviation for experiments
+        self._mean = (1.0 - self._alpha) * self._mean + self._alpha * measurement
+        self._dev = (1.0 - self._beta) * self._dev + self._beta * np.abs(self._mean - measurement)
+
+        # Update policy parameters
+        self._average_dev.append(self._dev)
+
+
     def reset(self):
         super().reset()
         self._skip_idx = 0
+        self._training_data: List[List[float]] = []

@@ -96,7 +96,7 @@ def bar_plot(ax, data, error={}, colors=None, total_width=0.8, single_width=1.0,
 
     # Draw legend if we need
     if legend:
-        ax.legend(bars, legend, loc=2)
+        ax.legend(bars, legend, loc=1)
 
     # Draw values on top of bar
     for bar in all_bars:

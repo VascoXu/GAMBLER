@@ -28,7 +28,7 @@ if __name__ == '__main__':
     # Load the results
     dist_num = args.dist_num
     base = os.path.dirname(__file__)
-    filepath = os.path.join(base, '../results', f'{args.distribution}_distribution_{dist_num}.json.gz')
+    filepath = os.path.join(base, '../results', f'error/{args.distribution}_distribution_{dist_num}.json.gz')
     dataset_results = read_json_gz(filepath)
 
     # Compute mean error of each dataset
@@ -61,6 +61,8 @@ if __name__ == '__main__':
         policy_mean = geometric_mean(mean_errors[policy])
         mean_errors[policy].append(policy_mean)
         mean_std[policy].append(np.std(mean_errors[policy]))
+
+    print(mean_errors)
 
 
     # Plot mean errors

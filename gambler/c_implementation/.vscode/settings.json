@@ -6,6 +6,24 @@
         "fixed_point.h": "c",
         "main.h": "c",
         "stdio.h": "c",
-        "inference_tests.h": "c"
+        "inference_tests.h": "c",
+        "array": "c",
+        "vector": "c",
+        "matrix.h": "c",
+        "policy_parameters.h": "c",
+        "sampler.h": "c",
+        "data.h": "c",
+        "parameters.h": "c",
+        "__hash_table": "c",
+        "__split_buffer": "c",
+        "bitset": "c",
+        "initializer_list": "c",
+        "unordered_map": "c",
+        "__config": "c",
+        "chrono": "c",
+        "ios": "c",
+        "bitmap.h": "c",
+        "__locale": "c",
+        "stdlib.h": "c"
     }
 }

@@ -6,7 +6,7 @@ static FixedPoint POLICY_BUFFER[256];
 /**
  * Uniform Policy Functions
  */
-void uniform_policy_init(struct UniformPolicy *policy, const uint16_t *collectIndices, uint16_t numIndices) {
+void uniform_policy_init(struct UniformPolicy *policy, uint16_t *collectIndices[NUM_INDICES], uint16_t numIndices) {
     policy->collectIndices = collectIndices;
     policy->numIndices = numIndices;
     policy->collectIdx = 0;
@@ -18,7 +18,7 @@ uint8_t uniform_should_collect(struct UniformPolicy *policy, uint16_t seqIdx) {
         return 0;
     }
 
-    uint8_t result = (seqIdx == policy->collectIndices[policy->collectIdx]);
+    uint8_t result = (seqIdx == policy->collectIndices[policy->numIndices-OFFSET][policy->collectIdx]);
     policy->collectIdx += result;
     return result;
 }
@@ -104,6 +104,8 @@ void deviation_update(struct DeviationPolicy *policy, struct Vector *curr, uint1
     policy->dev = vector_gated_add_scalar(policy->dev, &temp, policy->dev, policy->beta, precision);
     FixedPoint norm = vector_norm(policy->dev);
 
+    printf("norm: %d\n", norm);
+
     if (norm >= policy->threshold) {
         uint16_t nextSkip = (policy->currentSkip) >> 1;
         uint8_t cond = nextSkip < policy->minSkip;
@@ -125,3 +127,79 @@ void deviation_reset(struct DeviationPolicy *policy)  {
     vector_set(policy->dev, 0);
 }
 
+/**
+ * Gambler Policy Functions
+ */
+
+void gambler_policy_init(struct GamblerPolicy *policy, uint16_t *collectIndices[NUM_INDICES], FixedPoint predFeatures[], uint16_t numIndices, FixedPoint collectionRate, FixedPoint budget, FixedPoint alpha, FixedPoint beta, struct Vector *mean, struct Vector *dev) {
+    policy->collectIndices = collectIndices;
+    policy->collectionRate = collectionRate;
+    policy->budget = budget;
+    policy->samplesLeft = TOTAL_SAMPLES;
+    policy->numIndices = numIndices;
+    policy->predFeatures = predFeatures;
+    policy->collectIdx = 0;
+    policy->collected = 0;
+    policy->alpha = alpha;
+    policy->beta = beta;
+    policy->mean = mean;
+    policy->dev = dev;
+    policy->meanDev = 0;
+
+    // TODO: mean and dev are not always initialized to 0?
+}
+
+uint8_t gambler_should_collect(struct GamblerPolicy *policy, uint16_t seqIdx) {
+    if (policy->collectIdx >= policy->numIndices || policy->collected >= policy->budget) {
+        return 0;
+    }
+
+    uint8_t result = (seqIdx == policy->collectIndices[policy->numIndices-OFFSET][policy->collectIdx]);
+    policy->collectIdx += result;
+    policy->collected += result;
+    return result;
+}
+
+void gambler_update(struct GamblerPolicy *policy, struct Vector *curr, uint16_t precision) {
+    int i; 
+    policy->mean = vector_gated_add_scalar(policy->mean, curr, policy->mean, policy->alpha, precision);
+
+    struct Vector temp = { POLICY_BUFFER, curr->size };
+    vector_absolute_diff(&temp, curr, policy->mean);
+
+    policy->dev = vector_gated_add_scalar(policy->dev, &temp, policy->dev, policy->beta, precision);
+    FixedPoint norm = vector_norm(policy->dev);
+
+    policy->meanDev += norm;
+}
+
+void gambler_update_policy(struct GamblerPolicy *policy) {
+    policy->samplesLeft -= WINDOW_SIZE;
+
+    uint32_t samplesLeft = policy->samplesLeft;
+    uint32_t leftover = (policy->budget - policy->collected);
+    uint32_t budgetLeft = ((leftover*WINDOW_SIZE) + (samplesLeft - 1))/samplesLeft; // round up
+
+    // Predict collection rate using decision tree
+    policy->meanDev /= WINDOW_SIZE;
+    FixedPoint meanDev = policy->meanDev / WINDOW_SIZE;
+    FixedPoint norm = vector_norm(policy->dev);
+    policy->predFeatures = (FixedPoint []) {policy->meanDev, policy->collectionRate};
+    uint8_t toCollect = decision_tree_inference(policy->predFeatures, &TREE);
+
+    // Compute the weighted average of predicted and uniform collection rate
+    uint32_t weight = fp32_div(INT_TO_FIXED(leftover), INT_TO_FIXED(policy->budget), DEFAULT_PRECISION);
+    uint32_t collectionRate = FIXED_TO_INT(fp_gated_add_scalar(INT_TO_FIXED(toCollect), INT_TO_FIXED(budgetLeft), weight, DEFAULT_PRECISION));
+
+    // Clip the collection rate
+    if (collectionRate > WINDOW_SIZE) {
+        collectionRate = WINDOW_SIZE;
+    }
+
+    policy->numIndices = collectionRate;
+    policy->meanDev = 0;
+}
+
+void gambler_reset(struct GamblerPolicy *policy) {
+    policy->collectIdx = 0;
+}

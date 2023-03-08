@@ -87,8 +87,8 @@ def execute_on_batch(policy: BudgetWrappedPolicy, batch: np.ndarray, energy_marg
     estimated = np.vstack(estimated_list)  # [B, T, D]
 
     # Compute the error over the batch
-    error = mean_absolute_error(y_true=inputs, y_pred=reconstructed)
-    # error = np.average(np.abs(batch - estimated))
+    # error = mean_absolute_error(y_true=inputs, y_pred=reconstructed)
+    error = np.average(np.abs(batch - estimated))
 
     return BatchResult(mae=error,
                        did_exhaust=policy.has_exhausted_budget())
@@ -270,10 +270,9 @@ if __name__ == '__main__':
     val_indices = np.arange(val_inputs.shape[0])
     rand = np.random.RandomState(seed=3485)
 
-
     if not args.collection_rates:
-        # collection_rates = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
-        collection_rates = [rate/100 for rate in range(0, 100, 5)][4:]
+        collection_rates = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
+        # collection_rates = [rate/100 for rate in range(0, 100, 5)][4:]
     else:
         collection_rates = args.collection_rates
 
@@ -349,4 +348,4 @@ if __name__ == '__main__':
     # print(threshold_map)
 
     # Save the results
-    # save_json_gz(threshold_map, output_file)
+    save_json_gz(threshold_map, output_file)

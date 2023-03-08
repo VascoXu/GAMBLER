@@ -9,6 +9,7 @@ from gambler.utils.file_utils import read_json, read_pickle_gz, read_json_gz
 from gambler.utils.data_types import PolicyType, PolicyResult, CollectMode
 from gambler.policies.policy import Policy
 from gambler.policies.adaptive_deviation import AdaptiveDeviation
+from gambler.policies.adaptive_welford import AdaptiveWelford
 from gambler.policies.adaptive_litesense import AdaptiveLiteSense
 from gambler.policies.adaptive_gambler import AdaptiveGambler
 from gambler.policies.adaptive_train import AdaptiveTrain
@@ -16,6 +17,7 @@ from gambler.policies.adaptive_heuristic import AdaptiveHeuristic
 from gambler.policies.adaptive_uniform import AdaptiveUniform
 from gambler.policies.adaptive_budget import AdaptiveBudget
 from gambler.policies.adaptive_prob import AdaptiveProb
+from gambler.policies.adaptive_shadow import AdaptiveShadow
 from gambler.policies.uniform_policy import UniformPolicy
 
 
@@ -84,8 +86,11 @@ class BudgetWrappedPolicy(Policy):
         return self._policy.threshold
 
     @property
+    def deviation(self) -> float:
+        return self._policy.deviation
+
+    @property
     def training_data(self):
-        assert(self._policy.policy_type ==  PolicyType.ADAPTIVE_TRAIN)
         return self._policy.training_data
 
     def set_threshold(self, threshold: float):
@@ -94,8 +99,8 @@ class BudgetWrappedPolicy(Policy):
     def set_budget(self, budget: int):
         self._budget = budget
 
-    def update(self, collection_ratio: float, seq_idx: int, window: tuple):
-        self._policy.update(collection_ratio, seq_idx, window)
+    def update(self, collection_ratio: float, seq_idx: int, window: tuple, measurements: List[np.ndarray]):
+        self._policy.update(collection_ratio, seq_idx, window, measurements)
         
     def should_update(self):
         return self._policy.should_update()
@@ -165,7 +170,7 @@ def make_policy(name: str,
         threshold_path = os.path.join(base, '../saved_models', dataset, 'thresholds_stream.json.gz')
 
         temp_name = name
-        if name == 'adaptive_train' or name == 'adaptive_uniform' or name =='adaptive_elitesense' or name == 'adaptive_budget' or name =='adaptive_prob' or name =='adaptive_gambler' or name =='adaptive_gamblerv2' or name =='adaptive_gamblerv3' or name =='adaptive_gamblerv4':
+        if name == 'adaptive_train' or name == 'adaptive_uniform' or name == 'adaptive_budget' or name =='adaptive_prob' or name =='adaptive_gambler' or name =='adaptive_shadow':
             name = 'adaptive_deviation'
 
         did_find_threshold = False
@@ -237,6 +242,10 @@ def make_policy(name: str,
             cls = AdaptiveProb
         elif name == 'adaptive_train':
             cls = AdaptiveTrain
+        elif name == 'adaptive_welford':
+            cls = AdaptiveWelford
+        elif name == 'adaptive_shadow':
+            cls = AdaptiveShadow
         else:
             raise ValueError('Unknown adaptive policy with name: {0}'.format(name))
 

@@ -1,11 +1,10 @@
 import os.path
 import numpy as np
+import pandas as pd
 from argparse import ArgumentParser
 from typing import List
 
 from gambler.utils.serialize_utils import array_to_fixed_point
-from gambler.utils.loading import load_data
-from gambler.utils.data_manager import get_data
 from gambler.utils.file_utils import make_dir, load_h5_dataset, randomize_dataset
 
 
@@ -22,38 +21,33 @@ if __name__ == '__main__':
     assert (args.precision >= 0) and (args.precision <= 15), 'The precision must be in [0, 16).'
 
     # Load the inputs and labels
-    """
     window_size = 20
-    path = os.path.join('train', args.dataset_name, f'{args.fold}_{window_size}.csv')
-    inputs, labels = load_h5_dataset(os.path.join('train', args.dataset_name, f'{args.fold}_{window_size}.csv'))
-    """
-    path = os.path.join('datasets', args.dataset_name, args.fold, 'data.h5')
-    inputs, labels = load_data(dataset_name=args.dataset_name, fold=args.fold)
+    dataset = pd.read_csv(os.path.join('train', args.dataset_name, f'{args.fold}_{window_size}.csv'), names=['dev', 'budget', 'rate'])
+    # dataset = dataset.loc[dataset['budget'] == 0.7]
+    inputs = np.array((dataset['dev'].apply(lambda x: [x]) + dataset['budget'].apply(lambda x: [x])).to_list())
+    labels = dataset['rate'].values
 
-    inputs, labels = get_data(inputs=inputs, labels=labels, classes=[1, 1, 1, 2, 2, 2])
+    # Randomize dataset
+    if args.should_randomize:
+        inputs, labels = randomize_dataset(inputs, labels)
 
-    #TODO: fix labels (currently match sequences not individual inputs)
-
-    # Serialize the inputs into a static C array
-    inputs = inputs.reshape(inputs.shape[0]*inputs.shape[1], inputs.shape[2])
-
-    # inputs = inputs[0:args.num_inputs]
-    # labels = labels[0:args.num_inputs]
-
-    num_inputs, num_features = inputs.shape
-
-    print(num_inputs)
+    inputs = inputs[0:args.num_inputs]
+    labels = labels[0:args.num_inputs]
 
     # Quantize the input features
     quantized_inputs = array_to_fixed_point(inputs, precision=args.precision, width=16)
+    # labels = array_to_fixed_point(labels, precision=args.precision, width=16)
+
+    # Serialize the inputs into a static C array
+    num_inputs, num_features = inputs.shape
 
     input_str = list(map(str, quantized_inputs.reshape(-1)))
-    input_var = 'static int16_t DATASET[] = {{ {} }};\n'.format(','.join(input_str))
+    input_var = 'static int16_t DATASET_INPUTS[] = {{ {} }};\n'.format(','.join(input_str))
 
     label_str = list(map(str, labels))
     label_var = 'static uint8_t DATASET_LABELS[] = {{ {} }};\n'.format(','.join(label_str))
 
-    with open('c_implementation/data.h', 'w') as fout:
+    with open('c_implementation/tests/data.h', 'w') as fout:
         fout.write('#include <stdint.h>\n')
 
         if args.is_msp:
@@ -63,7 +57,7 @@ if __name__ == '__main__':
         fout.write('#define DATA_H_\n')
 
         fout.write('#define NUM_FEATURES {}\n'.format(num_features))
-        fout.write('#define DATASET_LENGTH {}\n'.format(num_inputs*num_features))
+        fout.write('#define NUM_INPUTS {}\n'.format(num_inputs))
 
         # For MSP430 implementations, place the data into FRAM
         if args.is_msp:

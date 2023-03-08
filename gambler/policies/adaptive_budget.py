@@ -101,7 +101,7 @@ class AdaptiveBudget(AdaptiveLiteSense):
         self._samples_collected += 1
 
 
-    def update(self, collection_ratio: float, seq_idx: int, window: tuple):
+    def update(self, collection_ratio: float, seq_idx: int, window: tuple, measurements: List[np.ndarray]):
         self._total_samples -= self._window_size
         leftover = self._budget - self._samples_collected
         

@@ -40,6 +40,7 @@ class AdaptiveLiteSense(AdaptivePolicy):
         self._alpha = 0.7
         self._beta = 0.7
 
+        # TODO: is this correct? 
         self._budget = seq_length*collection_rate
 
         self._mean = np.zeros(shape=(num_features, ))  # [D]

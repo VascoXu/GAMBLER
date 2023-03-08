@@ -4,8 +4,10 @@ import gzip
 import json
 import pickle
 import codecs
+import h5py
+import numpy as np
 from collections import OrderedDict
-from typing import Any, Optional, Iterable
+from typing import Any, Optional, Iterable, Tuple
 
 
 def make_dir(path: str):
@@ -23,6 +25,23 @@ def iterate_dir(folder: str, pattern: Optional[str] = None) -> Iterable[str]:
         match = re.match(pattern, file_name)
         if match is not None:
             yield os.path.join(folder, file_name)
+
+
+def load_h5_dataset(path: str) -> Tuple[np.ndarray, np.ndarray]:
+    with h5py.File(path, 'r') as fin:
+        inputs = fin['inputs'][:]
+        labels = fin['output'][:]
+
+    if len(inputs.shape) == 3:
+        inputs = inputs.reshape(inputs.shape[0], -1)
+
+    return inputs, labels
+
+
+def randomize_dataset(inputs: Iterable[Any], labels: Iterable[Any]) -> Iterable[Any]:
+    assert inputs.shape[0] == labels.shape[0]
+    p = np.random.permutation(inputs.shape[0])
+    return (inputs[p], labels[p])
 
 
 def save_jsonl_gz(data: Iterable[Any], file_path: str) -> None:

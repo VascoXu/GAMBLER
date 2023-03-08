@@ -84,7 +84,7 @@ def run_policy(policy: BudgetWrappedPolicy, sequence: np.ndarray, should_enforce
 
             # Update policy 
             if policy.policy_type != PolicyType.ADAPTIVE_DEVIATION and policy.policy_type != PolicyType.ADAPTIVE_HEURISTIC:
-                policy.update(collection_ratio, seq_idx, window=(window_cnt, window_num))
+                policy.update(collection_ratio, seq_idx, window=(window_cnt, window_num), measurements=measurement_list)
 
             policy.step(seq_idx=0, count=collected_within_window)
 

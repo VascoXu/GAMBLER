@@ -169,8 +169,8 @@ def fit_adaptive_budget(policy: BudgetWrappedPolicy, inputs: np.ndarray, dataset
     """
 
     # Load training data
-    train_inputs, _ = load_data(dataset_name=dataset, fold='validation')
-    val_inputs, _ = load_data(dataset_name=dataset, fold='train')
+    train_inputs, _ = load_data(dataset_name=dataset, fold='train')
+    # val_inputs, _ = load_data(dataset_name=dataset, fold='train')
 
     num_seq, seq_length, num_features = train_inputs.shape
     num_samples = inputs.shape[0]*inputs.shape[1]
@@ -269,7 +269,7 @@ def fit_adaptive_budget(policy: BudgetWrappedPolicy, inputs: np.ndarray, dataset
     return (closest_error, closest_collected)
 
 
-def fit_uniform_budget(policy: BudgetWrappedPolicy, inputs: np.ndarray, target_error: float):
+def fit_gambler_policy(policy: BudgetWrappedPolicy, dataset_name: str, inputs: np.ndarray, target_error: float):
     """
     Perform a "binary-search" for most comparable-budget that achieve similar accuracy to GAMBLER.
     """
@@ -296,26 +296,29 @@ def fit_uniform_budget(policy: BudgetWrappedPolicy, inputs: np.ndarray, target_e
         current = (upper + lower) / 2
         rate = current/100
 
-        policy = BudgetWrappedPolicy(name='uniform',
+        policy = BudgetWrappedPolicy(name='adaptive_gambler',
                                     num_seq=num_seq,
-                                    seq_length=seq_length,
+                                    seq_length=num_samples,
                                     num_features=num_features,
                                     dataset=dataset,
                                     collection_rate=rate,
                                     collect_mode='tiny',
-                                    window_size=20,
+                                    window_size=WINDOW_SIZES[dataset_name],
                                     model='',
                                     max_skip=0)
         policy.init_for_experiment(num_sequences=num_seq)
         policy.reset()
 
         # Execute policy
-        policy_results = execute_policy(policy=policy, batch=inputs)
-        observed_error, num_collected = policy_results.error, policy_results.num_collected
+        policy_results = run_policy(policy=policy,
+                                    sequence=test_inputs.reshape(num_seq*seq_length, num_features),
+                                    reconstruct=False,
+                                    should_enforce_budget=True)
+        observed_error, num_collected = get_policy_stats(policy_results, test_inputs)                                    
 
         if args.should_print:
-            # print(f'Error: {observed_error:0.5f} | # Collected: {num_collected} | Budget: {rate*num_samples} | Rate: {rate}', end='\r')
-            print(f'Error: {observed_error:0.5f} | # Collected: {num_collected} | Budget: {rate*num_samples} | Rate: {rate} | Lower: {lower} Upper: {upper}')
+            print(f'Error: {observed_error:0.5f} | # Collected: {num_collected} | Budget: {rate*num_samples} | Rate: {rate}', end='\r')
+            # print(f'Error: {observed_error:0.5f} | # Collected: {num_collected} | Budget: {rate*num_samples} | Rate: {rate} | Lower: {lower} Upper: {upper}')
 
         if observed_error < target_error:
             upper = current # Decrease given budget
@@ -380,7 +383,7 @@ if __name__ == '__main__':
     policies = [
         'adaptive_deviation',
         'adaptive_heuristic',
-        'uniform',
+        'adaptive_gambler',
     ]
     budgets = [0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9]
     num_runs = len(budgets)
@@ -394,7 +397,7 @@ if __name__ == '__main__':
             savings_map[dataset] = dict()
         for policy in policies:
             savings_map[dataset][policy] = []
-        savings_map[dataset]['adaptive_gambler'] = []
+        savings_map[dataset]['uniform'] = []
 
     
     for dataset in args.datasets:
@@ -427,28 +430,31 @@ if __name__ == '__main__':
             num_samples = num_seq*seq_length
 
             # Execute GAMBLER policy (baseline)
-            policy = BudgetWrappedPolicy(name='adaptive_gambler',
+            policy = BudgetWrappedPolicy(name='uniform',
                                         num_seq=num_seq,
                                         seq_length=num_samples,
                                         num_features=num_features,
                                         dataset=dataset,
                                         collection_rate=budget,
                                         collect_mode='tiny',
-                                        window_size=WINDOW_SIZES[dataset],
+                                        window_size=20,
                                         model='',
                                         max_skip=0)
             policy_results = run_policy(policy=policy,
                                         sequence=test_inputs.reshape(num_seq*seq_length, num_features),
                                         reconstruct=False,
                                         should_enforce_budget=True)
-            target_error, gambler_collected = get_policy_stats(policy_results, test_inputs)
-            savings_map[dataset]['adaptive_gambler'].append([budget, gambler_collected, target_error])
+            target_error, uniform_collected = get_policy_stats(policy_results, test_inputs)
+            savings_map[dataset]['uniform'].append([budget, uniform_collected, target_error])
 
             if args.should_print:
-                print(f"Given Budget: {budget} | # Sample Budget: {budget*num_samples} | Target Error: {target_error} | Collected: {gambler_collected}")
+                print("Uniform Policy")
+                print("---------------")
+                print(f"Given Budget: {budget} | # Sample Budget: {budget*num_samples} | Target Error: {target_error} | Collected: {uniform_collected}\n")
 
             for policy_name in policies:
-                print(f"Policy: {policy_name}")
+                print(f"{policy_name.capitalize()} Policy")
+                print("---------------")
 
                 # Make the policy
                 policy = BudgetWrappedPolicy(name=policy_name,
@@ -462,8 +468,8 @@ if __name__ == '__main__':
                                             model='',
                                             max_skip=0)                
 
-                if policy_name == 'uniform':
-                    error, num_collected = fit_uniform_budget(policy, test_inputs, target_error)
+                if policy_name == 'adaptive_gambler':
+                    error, num_collected = fit_gambler_policy(policy, dataset, test_inputs, target_error)
                 elif policy_name.startswith('adaptive'):
                     error, num_collected = fit_adaptive_budget(policy, test_inputs, dataset, budget, target_error)
 

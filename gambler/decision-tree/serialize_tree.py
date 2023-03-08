@@ -1,6 +1,9 @@
 import numpy as np
 from argparse import ArgumentParser
 from sklearn import tree
+from typing import List, Tuple
+import pickle
+
 from sklearn.ensemble import AdaBoostClassifier
 from sklearn.tree import DecisionTreeClassifier
 
@@ -8,7 +11,7 @@ from gambler.utils.file_utils import read_pickle_gz
 from gambler.utils.serialize_utils import serialize_int_array, serialize_float_array
 
 
-def serialize_tree(clf: DecisionTreeClassifier, name: str, precision: int, is_msp: bool):
+def serialize_tree(clf: DecisionTreeClassifier, name: str, labels: List[int], precision: int, is_msp: bool):
     root = clf.tree_
     lines: List[str] = []
     num_nodes = len(root.feature)
@@ -38,7 +41,7 @@ def serialize_tree(clf: DecisionTreeClassifier, name: str, precision: int, is_ms
     left_name = '{}_CHILDREN_LEFT'.format(name)
     children_left = serialize_int_array(var_name=left_name,
                                         array=root.children_left,
-                                        dtype='int8_t')
+                                        dtype='int16_t')
 
     if is_msp:
         lines.append('#pragma PERSISTENT({})'.format(left_name))
@@ -48,7 +51,7 @@ def serialize_tree(clf: DecisionTreeClassifier, name: str, precision: int, is_ms
     right_name = '{}_CHILDREN_RIGHT'.format(name)
     children_right = serialize_int_array(var_name=right_name,
                                          array=root.children_right,
-                                         dtype='int8_t')
+                                         dtype='int16_t')
 
     if is_msp:
         lines.append('#pragma PERSISTENT({})'.format(right_name))
@@ -57,8 +60,8 @@ def serialize_tree(clf: DecisionTreeClassifier, name: str, precision: int, is_ms
 
     pred_name = '{}_PREDICTIONS'.format(name)
     predictions = serialize_int_array(var_name=pred_name,
-                                      array=[np.argmax(node[0]) for node in root.value],
-                                      dtype='uint8_t')
+                                      array=[labels[np.argmax(node[0])] for node in root.value],
+                                      dtype='uint16_t')
 
     if is_msp:
         lines.append('#pragma PERSISTENT({})'.format(pred_name))
@@ -113,14 +116,15 @@ if __name__ == '__main__':
     parser.add_argument('--is-msp', action='store_true', help='Whether to serialize the system for the MSP430.')
     args = parser.parse_args()
 
-    clf = read_pickle_gz(args.model_path)
+    clf = pickle.load(open(args.model_path, 'rb'))
 
     num_labels = clf.n_classes_
+    labels = clf.classes_
     num_input_features = clf.n_features_in_
 
-    serialized_model = serialize_ensemble(clf, precision=args.precision, is_msp=args.is_msp)
+    serialized_model = serialize_tree(clf, name='TREE', labels=labels, precision=args.precision, is_msp=args.is_msp)
 
-    with open('parameters.h', 'w') as fout:
+    with open('c_implementation/parameters.h', 'w') as fout:
         fout.write('#include <stdint.h>\n')
         
         if args.is_msp:
@@ -133,7 +137,7 @@ if __name__ == '__main__':
 
         fout.write('#define PRECISION {}\n'.format(args.precision))
         fout.write('#define NUM_LABELS {}\n'.format(num_labels))
-        fout.write('#define NUM_INPUT_FEATURES {}\n\n'.format(num_input_features))
+        fout.write('#define NUM_TREE_FEATURES {}\n\n'.format(num_input_features))
 
         fout.write(serialized_model)
 

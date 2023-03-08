@@ -44,6 +44,8 @@ class AdaptiveTrain(AdaptiveLiteSense):
         # Default parameters
         self._seq_length = seq_length
         self._dataset = dataset
+
+        self._collected = 0
         
         # Policy parameters
         self._average_dev: List[float] = []
@@ -58,7 +60,7 @@ class AdaptiveTrain(AdaptiveLiteSense):
         return self._training_data
 
 
-    def update(self, collection_ratio: float, seq_idx: int, window: tuple):
+    def update(self, collection_ratio: float, seq_idx: int, window: tuple, measurements: List[np.ndarray]):
         # Ensure budget was not exhausted
         if len(self._average_dev) == 0:
             return
@@ -67,9 +69,11 @@ class AdaptiveTrain(AdaptiveLiteSense):
 
         # Hold training data
         self._training_data.append([np.sum(dev), self._collection_rate, collection_ratio])
+        # self._training_data.append([np.sum(dev), self._collection_rate, self._collected])
         
         # Reset parameters
         self._average_dev: List[float] = []
+        self._collected = 0
 
 
     def collect(self, measurement: np.ndarray):
@@ -78,6 +82,7 @@ class AdaptiveTrain(AdaptiveLiteSense):
 
         # Update policy parameters
         self._average_dev.append(self._dev)
+        self._collected += 1
 
         norm = np.sum(self._dev)
         if norm > self._threshold:

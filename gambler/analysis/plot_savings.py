@@ -24,7 +24,7 @@ def load_savings(distribution):
     for dataset in DATASETS:
         # Load the results
         base = os.path.dirname(__file__)
-        filepath = os.path.join(base, '../results/budget_savings', f'budget_savings_{args.distribution}_{dataset}.json.gz')
+        filepath = os.path.join(base, '../results/budget_savings_v2', f'budget_savings_{args.distribution}_{dataset}.json.gz')
         results = read_json_gz(filepath)
         dataset_results[dataset] = results[dataset]
 
@@ -35,6 +35,7 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('--normalized', action='store_true')
     parser.add_argument('--distribution', type=str, default='expected')
+    parser.add_argument('--should-print', action='store_true')
     args = parser.parse_args()
     
     # Load budget reduction data
@@ -46,23 +47,32 @@ if __name__ == '__main__':
         mean_savings[policy] = []
 
     for dataset in dataset_results.keys():
-        gambler_savings = [error[1] for error in dataset_results[dataset]['adaptive_gambler']]
-        gambler_mean = geometric_mean(gambler_savings)
+        norm_savings = [error[1] for error in dataset_results[dataset]['uniform']]
+        norm_mean = sum(norm_savings)/len(norm_savings)
+        # gambler_mean = geometric_mean(gambler_savings)
+
+        if args.should_print:
+            print(f'Dataset: {dataset.capitalize()}')
+            print('Uniform Errors:', norm_savings)
 
         for policy in policies.keys():
             savings = [error[1] for error in dataset_results[dataset][policy]]
+            
+            if args.should_print:
+                print(f'{policy.capitalize()} Errors: ', savings)
+                print('------------------------------------')
 
             # compute policy average
-            # policy_mean = sum(savings)/len(savings)
-            policy_mean = geometric_mean(savings)
+            policy_mean = sum(savings)/len(savings)
+            # policy_mean = geometric_mean(savings)
             
             # compute percentage decrease
-            mean_diff = gambler_mean-policy_mean
-            pct_dec = (mean_diff/gambler_mean)*100
+            mean_diff = norm_mean-policy_mean
+            pct_dec = (mean_diff/norm_mean)*100
 
             # normalize savings to uniform
-            # normalized_mean = policy_mean/uniform_mean
-            mean_savings[policy].append(pct_dec)
+            normalized_mean = policy_mean/norm_mean
+            mean_savings[policy].append(normalized_mean)
 
 
     # Compute mean of datasets
@@ -83,9 +93,9 @@ if __name__ == '__main__':
         ax.axvline((xs[-2] + xs[-1]) / 2, color='k', linestyle='--', linewidth=1)
         ax.axhline(0, color='k', linewidth=1)
 
-        plt.ylabel('Energy Reduction compared to Uniform (%)', fontsize=16)
+        plt.ylabel('Mean Normalized Energy Budget', fontsize=16)
         plt.xlabel('Datasets', fontsize=16)
         plt.xticks(range(len(datasets)), datasets, fontsize=AXIS_FONT)
-        plt.title(f'Energy Savings across Multiple Datasets (Distribution: {args.distribution.capitalize()})', fontsize=TITLE_FONT)
+        plt.title(f'Mean Normalized Budget Required for Error Comparable to Uniform (Distribution: {args.distribution.capitalize()})', fontsize=TITLE_FONT)
         fig.tight_layout()
         plt.show()
